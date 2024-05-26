@@ -1,0 +1,26 @@
+{
+  "title": "FindMy",
+  "config": {
+    "step": {
+      "login": {
+        "title": "Apple Account Login",
+        "data": {
+          "anisette_url": "Anisette URL",
+          "email": "E-mail address",
+          "password": "Password"
+        }
+      },
+      "2fa_request": {
+        "title": "Two-Factor Authentication"
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid username or password",
+      "2fa_unavailable": "No available 2FA methods found. Please try another account."
+    },
+    "abort": {
+      "protocol_error": "A protocol exception occurred. Please report this error and try again later.",
+      "unknown_error": "An unexpected error occurred. Please try again later."
+    }
+  }
+}

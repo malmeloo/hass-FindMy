@@ -1,0 +1,12 @@
+version: '3'
+services:
+  homeassistant:
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    volumes:
+      - ./.hass-config:/config
+      - ./custom_components/findmy:/config/custom_components/findmy
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+    restart: "no"
+    ports:
+      - "8123:8123"

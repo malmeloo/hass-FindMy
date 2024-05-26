@@ -1,0 +1,38 @@
+[tool.poetry]
+name = "hass-findmy"
+version = "0.1.0"
+description = ""
+authors = ["Mike A. <git@mikealmel.ooo>"]
+readme = "README.md"
+packages = [{include = "hass_findmy"}]
+
+[tool.poetry.dependencies]
+python = "^3.11,<3.13"
+homeassistant = "^2024.2.1"
+findmy = "^0.4.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.2.1"
+pre-commit = "^3.6.0"
+
+[tool.ruff]
+select = [
+    "ALL",
+]
+ignore = [
+    "ANN002", # annotations on `*args`
+    "ANN003", # annotations on `**kwargs`
+    "ANN101", # annotations on `self`
+    "ANN102", # annotations on `cls`
+
+    "D203", # one blank line before class docstring
+    "D212", # multi-line docstring start at first line
+    "D105", # docstrings in magic methods
+]
+
+line-length = 100
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
