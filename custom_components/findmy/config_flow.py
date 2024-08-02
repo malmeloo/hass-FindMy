@@ -1,19 +1,18 @@
 """Integration config flow."""
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import TYPE_CHECKING, TypedDict, Callable
+import re
+from typing import TYPE_CHECKING, Callable, TypedDict
 
 import voluptuous as vol
 from homeassistant import config_entries
 
+from findmy.errors import InvalidCredentialsError, UnhandledProtocolError
 from findmy.reports import AsyncAppleAccount, LoginState, RemoteAnisetteProvider
-from findmy.reports.twofactor import SmsSecondFactorMethod, AsyncSecondFactorMethod
-from findmy.util.errors import InvalidCredentialsError, UnhandledProtocolError
+from findmy.reports.twofactor import AsyncSecondFactorMethod, SmsSecondFactorMethod
 
 from .const import DEFAULT_ANISETTE_URL, DOMAIN
-import re
 
 if TYPE_CHECKING:
     from typing import Any
@@ -67,21 +66,21 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="login",
-            data_schema=DATA_SCHEMA_LOGIN
+            data_schema=DATA_SCHEMA_LOGIN,
         )
 
     async def async_step_login(self, info: LoginFlowInput) -> FlowResult:
         _LOGGER.debug(
             "%s Step: login - %s",
             self.__class__.__name__,
-            {**info, "password": "**REDACTED**"}
+            {**info, "password": "**REDACTED**"},
         )
 
         if info is None:
             logging.warning("Login step called without info data")
             return self.async_show_form(
                 step_id="login",
-                data_schema=DATA_SCHEMA_LOGIN
+                data_schema=DATA_SCHEMA_LOGIN,
             )
 
         await self.async_set_unique_id(info["email"].lower())
@@ -99,7 +98,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="login",
                 data_schema=DATA_SCHEMA_LOGIN,
-                errors={"base": "invalid_auth"}
+                errors={"base": "invalid_auth"},
             )
         except UnhandledProtocolError:
             _LOGGER.exception("Unhandled protocol exception during login")
@@ -132,12 +131,12 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="login",
                 data_schema=DATA_SCHEMA_LOGIN,
-                errors={"base": "2fa_unavailable"}
+                errors={"base": "2fa_unavailable"},
             )
 
         return self.async_show_menu(
             step_id="2fa_request",
-            menu_options=menu_options
+            menu_options=menu_options,
         )
 
     async def async_step_2fa_request(self, info: dict | None) -> FlowResult:
@@ -161,4 +160,4 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_done(self, info: dict | None = None) -> FlowResult:
         _LOGGER.debug("%s Step: done - %s", self.__class__.__name__, info)
 
-        return self.async_abort()
+        return self.async_abort(reason="")
