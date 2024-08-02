@@ -128,7 +128,7 @@ class FindMyDeviceTracker(CoordinatorEntity[FindMyCoordinator], TrackerEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        self._last_location = self._coordinator.data.get(self._device)
+        self._last_location = (self._coordinator.data or {}).get(self._device)
         _LOGGER.debug("Updated data from coordinator: %s", self._last_location)
 
         self.async_write_ha_state()
