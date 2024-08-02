@@ -11,12 +11,21 @@
         }
       },
       "2fa_request": {
-        "title": "Two-Factor Authentication"
+        "title": "Two-Factor Authentication",
+        "description": "Select a method to receive your 2FA code."
+      },
+      "2fa_submit": {
+        "title": "Two-Factor Authentication",
+        "description": "Enter the 2FA code you received.",
+        "data": {
+          "code": "2FA code"
+        }
       }
     },
     "error": {
       "invalid_auth": "Invalid username or password",
-      "2fa_unavailable": "No available 2FA methods found. Please try another account."
+      "2fa_unavailable": "No available 2FA methods found. Please try another account.",
+      "2fa_invalid": "Error while validating 2FA code. Please try again."
     },
     "abort": {
       "protocol_error": "A protocol exception occurred. Please report this error and try again later.",

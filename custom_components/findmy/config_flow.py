@@ -10,7 +10,11 @@ from homeassistant import config_entries
 
 from findmy.errors import InvalidCredentialsError, UnhandledProtocolError
 from findmy.reports import AsyncAppleAccount, LoginState, RemoteAnisetteProvider
-from findmy.reports.twofactor import AsyncSecondFactorMethod, SmsSecondFactorMethod
+from findmy.reports.twofactor import (
+    AsyncSecondFactorMethod,
+    SmsSecondFactorMethod,
+    TrustedDeviceSecondFactorMethod,
+)
 
 from .const import DEFAULT_ANISETTE_URL, DOMAIN
 
@@ -21,11 +25,18 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-DATA_SCHEMA_LOGIN = vol.Schema({
-    vol.Required("anisette_url", default=DEFAULT_ANISETTE_URL): str,
-    vol.Required("email"): str,
-    vol.Required("password"): str,
-})
+DATA_SCHEMA_LOGIN = vol.Schema(
+    {
+        vol.Required("anisette_url", default=DEFAULT_ANISETTE_URL): str,
+        vol.Required("email"): str,
+        vol.Required("password"): str,
+    },
+)
+DATA_SCHEME_2FA = vol.Schema(
+    {
+        vol.Required("code"): str,
+    },
+)
 
 MFA_MENU_CALLBACK_FMT = re.compile(r"^async_step_2fa_request_(\d+)$")
 
@@ -38,6 +49,10 @@ class LoginFlowInput(TypedDict):
     password: str
 
 
+class MfaSubmitForm(TypedDict):
+    code: str
+
+
 class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for initial setup."""
 
@@ -48,6 +63,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         super().__init__(*args, **kwargs)
 
         self._account: AsyncAppleAccount | None = None
+        self._2fa_method: AsyncSecondFactorMethod | None = None
 
         self._error: Exception | None = None
         self._2fa_methods: list[AsyncSecondFactorMethod] = []
@@ -121,7 +137,9 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         menu_options: dict[str, str] = {}
         for method in self._2fa_methods:
-            if isinstance(method, SmsSecondFactorMethod):
+            if isinstance(method, TrustedDeviceSecondFactorMethod):
+                menu_options[f"2fa_request_{len(menu_options)}"] = "Trusted Device"
+            elif isinstance(method, SmsSecondFactorMethod):
                 menu_options[f"2fa_request_{len(menu_options)}"] = f"SMS - {method.phone_number}"
             else:
                 logging.warning("Unknown 2FA method: %s", method)
@@ -148,16 +166,52 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         try:
             method_id = info.get("method_id")
-            method = self._2fa_methods[method_id]
+            self._2fa_method = self._2fa_methods[method_id]
         except KeyError:
             _LOGGER.exception("Unable to look up method ID")
             return self.async_abort(reason="unknown_error")
 
-        await method.request()
+        await self._2fa_method.request()
+
+        return self.async_show_form(
+            step_id="2fa_submit",
+            data_schema=DATA_SCHEME_2FA,
+        )
+
+    async def async_step_2fa_submit(self, info: MfaSubmitForm) -> FlowResult:
+        _LOGGER.debug("%s Step: 2fa_submit - %s", self.__class__.__name__, info)
+
+        code = info.get("code")
+        if not code:
+            _LOGGER.error("No 2FA code submitted")
+            return self.async_show_form(
+                step_id="2fa_submit",
+                data_schema=DATA_SCHEMA_LOGIN,
+            )
+
+        if self._2fa_method is None:
+            _LOGGER.error("No active 2FA method in the flow")
+            return self.async_show_form(
+                step_id="2fa_prompt",
+                data_schema=DATA_SCHEMA_LOGIN,
+            )
+
+        try:
+            await self._2fa_method.submit(code)
+        except UnhandledProtocolError:
+            _LOGGER.exception("Unhandled protocol exception during 2FA submit")
+            return self.async_show_form(
+                step_id="2fa_prompt",
+                data_schema=DATA_SCHEMA_LOGIN,
+                errors={"base": "2fa_invalid"},
+            )
 
         return await self.async_step_done()
 
     async def async_step_done(self, info: dict | None = None) -> FlowResult:
         _LOGGER.debug("%s Step: done - %s", self.__class__.__name__, info)
 
-        return self.async_abort(reason="")
+        return self.async_create_entry(
+            title=self._account.account_name,
+            data=self._account.export(),
+        )
