@@ -9,6 +9,8 @@ from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from findmy.keys import KeyPair
+
 from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
 
@@ -24,8 +26,11 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-# TODO: remove!  # noqa: FIX002, TD002, TD003
-_DEVICES = []
+# <-- ADD YOUR PRIVATE KEYS HERE! -->
+_KEYS = [
+    "",
+]
+_DEVICES = [KeyPair.from_b64(key) for key in _KEYS]
 
 
 async def async_setup_entry(
