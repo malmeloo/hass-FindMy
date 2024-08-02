@@ -2,4 +2,4 @@
 
 DOMAIN = "findmy"
 
-DEFAULT_ANISETTE_URL = "http://10.12.1.10:6969"
+DEFAULT_ANISETTE_URL = "https://ani.sidestore.io"
