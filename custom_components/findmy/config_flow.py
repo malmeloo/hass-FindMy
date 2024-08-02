@@ -53,6 +53,11 @@ class MfaSubmitForm(TypedDict):
     code: str
 
 
+class EntryData(TypedDict):
+    account_data: dict[Any, Any]
+    anisette_url: str
+
+
 class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for initial setup."""
 
@@ -62,6 +67,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize."""
         super().__init__(*args, **kwargs)
 
+        self._anisette_url: str | None = None
         self._account: AsyncAppleAccount | None = None
         self._2fa_method: AsyncSecondFactorMethod | None = None
 
@@ -104,7 +110,8 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         _LOGGER.info("Log into Apple account: %s", info["email"])
 
-        anisette = RemoteAnisetteProvider(info["anisette_url"])
+        self._anisette_url = info["anisette_url"]
+        anisette = RemoteAnisetteProvider(self._anisette_url)
         self._account = AsyncAppleAccount(anisette)
 
         # Attempt login
@@ -211,7 +218,16 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_done(self, info: dict | None = None) -> FlowResult:
         _LOGGER.debug("%s Step: done - %s", self.__class__.__name__, info)
 
+        if self._anisette_url is None or self._account is None:
+            _LOGGER.exception("No anisette url or account configured")
+            return self.async_abort(reason="unknown_error")
+
+        data: EntryData = {
+            "account_data": self._account.export(),
+            "anisette_url": self._anisette_url,
+        }
+
         return self.async_create_entry(
             title=self._account.account_name,
-            data=self._account.export(),
+            data=data,
         )
