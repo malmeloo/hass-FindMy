@@ -938,13 +938,13 @@ typing = ["typing-extensions (>=4.8)"]
 
 [[package]]
 name = "findmy"
-version = "0.7.2"
+version = "0.7.3"
 description = "Everything you need to work with Apple's Find My network!"
 optional = false
 python-versions = "<3.13,>=3.9"
 files = [
-    {file = "findmy-0.7.2-py3-none-any.whl", hash = "sha256:93c0c08e7265413b1379d7614b459addcb658f53305c71ccb0390218b9eaaf6d"},
-    {file = "findmy-0.7.2.tar.gz", hash = "sha256:24ac7da3e5bc9dbf9e2ddb0982882e40cd3581a4d38c3e893a5e9a2f6ec15c51"},
+    {file = "findmy-0.7.3-py3-none-any.whl", hash = "sha256:9c24cba3b5317b458050faa96d9a4df9e847d6c150a2befb7782537d14d80d12"},
+    {file = "findmy-0.7.3.tar.gz", hash = "sha256:1dc80c732940e84d99ca14718e15ac8b9dbe6c7fc0c72635ff2745daeeb2f2ac"},
 ]
 
 [package.dependencies]
@@ -2984,4 +2984,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12,<3.13"
-content-hash = "3d37c622e5e80524408f3ce9dbedde80281e87602f297488ff75a204730aba59"
+content-hash = "d3480c01a26968a5571b3f8e6ddd8873c64bbfa4863178207324a6d6c21e94b3"
