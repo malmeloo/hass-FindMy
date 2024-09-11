@@ -1,4 +1,5 @@
 """Integration config flow."""
+
 from __future__ import annotations
 
 import logging
@@ -83,8 +84,11 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         step_info = {"method_id": int(matches.group(1))}
         return lambda data: self.async_step_2fa_request({**(data or {}), **step_info})
 
-    async def async_step_user(self, info: dict[str, Any] | None = None) -> FlowResult:
-        _LOGGER.debug("%s Step: user - %s", self.__class__.__name__, info)
+    async def async_step_user(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        _LOGGER.debug("%s Step: user - %s", self.__class__.__name__, user_input)
 
         return self.async_show_form(
             step_id="login",
@@ -172,7 +176,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="unknown_error")
 
         try:
-            method_id = info.get("method_id")
+            method_id: int = info["method_id"]
             self._2fa_method = self._2fa_methods[method_id]
         except KeyError:
             _LOGGER.exception("Unable to look up method ID")

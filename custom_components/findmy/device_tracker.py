@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, Mapping
 
-from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
+from homeassistant.components.device_tracker.const import SourceType
 from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -50,7 +51,7 @@ async def async_setup_entry(
     return True
 
 
-class FindMyDeviceTracker(CoordinatorEntity[FindMyCoordinator], TrackerEntity):
+class FindMyDeviceTracker(CoordinatorEntity[FindMyCoordinator], TrackerEntity):  # pyright: ignore [reportIncompatibleVariableOverride]
     _attr_has_entity_name = True
     _attr_should_poll = False
 
@@ -66,11 +67,11 @@ class FindMyDeviceTracker(CoordinatorEntity[FindMyCoordinator], TrackerEntity):
     def findmy_device(self) -> FindMyDevice:
         return self._device
 
-    @property
-    def unique_id(self) -> str | None:
+    @cached_property
+    def unique_id(self) -> str:
         return self._device.hashed_adv_key_b64
 
-    @property
+    @cached_property
     def name(self) -> str:
         return "FindMy Tracker"
 
@@ -78,13 +79,13 @@ class FindMyDeviceTracker(CoordinatorEntity[FindMyCoordinator], TrackerEntity):
     def source_type(self) -> SourceType:
         return SourceType.GPS
 
-    @property
+    @cached_property
     def latitude(self) -> float | None:
         if self._last_location is None:
             return None
         return self._last_location.latitude
 
-    @property
+    @cached_property
     def longitude(self) -> float | None:
         if self._last_location is None:
             return None
@@ -108,7 +109,7 @@ class FindMyDeviceTracker(CoordinatorEntity[FindMyCoordinator], TrackerEntity):
             return None
         return self._last_location.description
 
-    @property
+    @cached_property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
             identifiers={
@@ -117,7 +118,7 @@ class FindMyDeviceTracker(CoordinatorEntity[FindMyCoordinator], TrackerEntity):
             name=self.name,
         )
 
-    @property
+    @cached_property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
         return {
             "detected_at": self.detected_at,

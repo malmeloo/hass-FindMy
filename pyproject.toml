@@ -4,14 +4,18 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12,<3.13"
-homeassistant = "2024.7.4"
-findmy = "0.7.3"
+homeassistant = "^2024.9.1"
+findmy = "^0.7.4"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.5.6"
+ruff = "^0.6.4"
 pre-commit = "^3.8.0"
+pyright = "^1.1.380"
 
 [tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
 select = [
     "ALL",
 ]
@@ -23,8 +27,6 @@ ignore = [
 
     "D"  # Documentation
 ]
-
-line-length = 100
 
 
 [build-system]
