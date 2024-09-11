@@ -5,9 +5,16 @@
       "login": {
         "title": "Apple Account Login",
         "data": {
-          "anisette_url": "Anisette URL",
           "email": "E-mail address",
           "password": "Password"
+        },
+        "sections": {
+          "advanced_options": {
+            "name": "Advanced options",
+            "data": {
+              "anisette_url": "Anisette URL"
+            }
+          }
         }
       },
       "2fa_request": {

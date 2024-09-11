@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Callable, TypedDict
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.data_entry_flow import section
 
 from findmy.errors import InvalidCredentialsError, UnhandledProtocolError
 from findmy.reports import AsyncAppleAccount, LoginState, RemoteAnisetteProvider
@@ -28,9 +29,15 @@ _LOGGER = logging.getLogger(__name__)
 
 DATA_SCHEMA_LOGIN = vol.Schema(
     {
-        vol.Required("anisette_url", default=DEFAULT_ANISETTE_URL): str,
         vol.Required("email"): str,
         vol.Required("password"): str,
+        "advanced_options": section(
+            vol.Schema(
+                {
+                    vol.Required("anisette_url", default=DEFAULT_ANISETTE_URL): str,
+                },
+            ),
+        ),
     },
 )
 DATA_SCHEME_2FA = vol.Schema(
@@ -42,12 +49,16 @@ DATA_SCHEME_2FA = vol.Schema(
 MFA_MENU_CALLBACK_FMT = re.compile(r"^async_step_2fa_request_(\d+)$")
 
 
+class LoginFlowAdvancedOptions(TypedDict):
+    anisette_url: str
+
+
 class LoginFlowInput(TypedDict):
     """Input to the login step."""
 
-    anisette_url: str
     email: str
     password: str
+    advanced_options: LoginFlowAdvancedOptions
 
 
 class MfaSubmitForm(TypedDict):
@@ -95,11 +106,11 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=DATA_SCHEMA_LOGIN,
         )
 
-    async def async_step_login(self, info: LoginFlowInput) -> FlowResult:
+    async def async_step_login(self, info: LoginFlowInput | None) -> FlowResult:
         _LOGGER.debug(
             "%s Step: login - %s",
             self.__class__.__name__,
-            {**info, "password": "**REDACTED**"},
+            {**(info or {}), "password": "**REDACTED**"},
         )
 
         if info is None:
@@ -114,7 +125,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         _LOGGER.info("Log into Apple account: %s", info["email"])
 
-        self._anisette_url = info["anisette_url"]
+        self._anisette_url = info["advanced_options"]["anisette_url"]
         anisette = RemoteAnisetteProvider(self._anisette_url)
         self._account = AsyncAppleAccount(anisette)
 
