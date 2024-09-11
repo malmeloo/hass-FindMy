@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from functools import cached_property
 from typing import TYPE_CHECKING, Any, Mapping
 
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
@@ -51,7 +50,10 @@ async def async_setup_entry(
     return True
 
 
-class FindMyDeviceTracker(CoordinatorEntity[FindMyCoordinator], TrackerEntity):  # pyright: ignore [reportIncompatibleVariableOverride]
+class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverride]
+    CoordinatorEntity[FindMyCoordinator],
+    TrackerEntity,
+):
     _attr_has_entity_name = True
     _attr_should_poll = False
 
@@ -67,26 +69,26 @@ class FindMyDeviceTracker(CoordinatorEntity[FindMyCoordinator], TrackerEntity): 
     def findmy_device(self) -> FindMyDevice:
         return self._device
 
-    @cached_property
-    def unique_id(self) -> str:
+    @property
+    def unique_id(self) -> str:  # pyright: ignore [reportIncompatibleVariableOverride]
         return self._device.hashed_adv_key_b64
 
-    @cached_property
-    def name(self) -> str:
+    @property
+    def name(self) -> str:  # pyright: ignore [reportIncompatibleVariableOverride]
         return "FindMy Tracker"
 
     @property
     def source_type(self) -> SourceType:
         return SourceType.GPS
 
-    @cached_property
-    def latitude(self) -> float | None:
+    @property
+    def latitude(self) -> float | None:  # pyright: ignore [reportIncompatibleVariableOverride]
         if self._last_location is None:
             return None
         return self._last_location.latitude
 
-    @cached_property
-    def longitude(self) -> float | None:
+    @property
+    def longitude(self) -> float | None:  # pyright: ignore [reportIncompatibleVariableOverride]
         if self._last_location is None:
             return None
         return self._last_location.longitude
@@ -109,8 +111,8 @@ class FindMyDeviceTracker(CoordinatorEntity[FindMyCoordinator], TrackerEntity): 
             return None
         return self._last_location.description
 
-    @cached_property
-    def device_info(self) -> DeviceInfo:
+    @property
+    def device_info(self) -> DeviceInfo:  # pyright: ignore [reportIncompatibleVariableOverride]
         return DeviceInfo(
             identifiers={
                 (DOMAIN, self.unique_id),
@@ -118,8 +120,10 @@ class FindMyDeviceTracker(CoordinatorEntity[FindMyCoordinator], TrackerEntity): 
             name=self.name,
         )
 
-    @cached_property
-    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+    @property
+    def extra_state_attributes(  # pyright: ignore [reportIncompatibleVariableOverride]
+        self,
+    ) -> Mapping[str, Any] | None:
         return {
             "detected_at": self.detected_at,
             "published_at": self.published_at,
