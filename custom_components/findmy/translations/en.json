@@ -2,7 +2,11 @@
   "title": "FindMy",
   "config": {
     "step": {
-      "login": {
+      "user": {
+        "title": "Add entity",
+        "description": "Select whether you want to add a new Apple Account or FindMy-enabled device."
+      },
+      "acc_login": {
         "title": "Apple Account Login",
         "data": {
           "email": "E-mail address",
@@ -17,22 +21,38 @@
           }
         }
       },
-      "2fa_request": {
+      "acc_2fa_prompt": {
         "title": "Two-Factor Authentication",
         "description": "Select a method to receive your 2FA code."
       },
-      "2fa_submit": {
+      "acc_2fa_submit": {
         "title": "Two-Factor Authentication",
         "description": "Enter the 2FA code you received.",
         "data": {
           "code": "2FA code"
         }
+      },
+      "dev_choose": {
+        "title": "Choose device type",
+        "data": {
+          "device_type": "Type of device to add"
+        }
+      },
+      "dev_static": {
+        "title": "Add a static device",
+        "description": "Enter the PRIVATE key of your custom, static-key tag and give it a memorable name.",
+        "data": {
+          "name": "Name",
+          "private_key": "Private key"
+        }
       }
     },
     "error": {
       "invalid_auth": "Invalid username or password",
-      "2fa_unavailable": "No available 2FA methods found. Please try another account.",
-      "2fa_invalid": "Error while validating 2FA code. Please try again."
+      "2fa_unavailable": "No available 2FA methods found. Please try another account",
+      "2fa_invalid": "Error while validating 2FA code. Please try again",
+      "invalid_dev": "Invalid device specified",
+      "invalid_dev_key": "Invalid key specified"
     },
     "abort": {
       "protocol_error": "A protocol exception occurred. Please report this error and try again later.",
