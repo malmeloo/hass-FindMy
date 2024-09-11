@@ -21,9 +21,12 @@
           }
         }
       },
-      "acc_2fa_prompt": {
+      "acc_2fa_request": {
         "title": "Two-Factor Authentication",
-        "description": "Select a method to receive your 2FA code."
+        "description": "Select a method to receive your 2FA code.",
+        "data": {
+          "method_id": "2FA method"
+        }
       },
       "acc_2fa_submit": {
         "title": "Two-Factor Authentication",
@@ -57,6 +60,13 @@
     "abort": {
       "protocol_error": "A protocol exception occurred. Please report this error and try again later.",
       "unknown_error": "An unexpected error occurred. Please try again later."
+    }
+  },
+  "selector": {
+    "device_type": {
+      "options": {
+        "static": "Static-key tag (OpenHaystack)"
+      }
     }
   }
 }

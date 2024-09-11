@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import logging
-import re
-from typing import TYPE_CHECKING, Callable, Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import section
-from homeassistant.helpers.selector import selector
+from homeassistant.helpers.selector import SelectOptionDict, SelectSelector, SelectSelectorConfig
 
 from findmy.accessory import KeyPair
 from findmy.errors import InvalidCredentialsError, UnhandledProtocolError
@@ -48,16 +47,14 @@ DATA_SCHEME_ACC_2FA = vol.Schema(
         vol.Required("code"): str,
     },
 )
-ACC_MFA_MENU_CALLBACK_FMT = re.compile(r"^async_step_acc_2fa_request_(\d+)$")
 
 DATA_SCHEME_DEV_CHOOSE = vol.Schema(
     {
-        "device_type": selector(
-            {
-                "select": {
-                    "options": ["static"],
-                },
-            },
+        "device_type": SelectSelector(
+            SelectSelectorConfig(
+                options=["static"],
+                translation_key="device_type",
+            ),
         ),
     },
 )
@@ -124,15 +121,6 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         self._error: Exception | None = None
         self._2fa_methods: list[AsyncSecondFactorMethod] = []
-
-    def __getattr__(self, item: str) -> Callable:
-        """Catch menu callbacks from the 2FA selection menu."""
-        matches = ACC_MFA_MENU_CALLBACK_FMT.fullmatch(item)
-        if not matches:
-            raise AttributeError
-
-        step_info = {"method_id": int(matches.group(1))}
-        return lambda data: self.async_step_acc_2fa_request({**(data or {}), **step_info})
 
     async def async_step_user(
         self,
@@ -214,13 +202,21 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         self._2fa_methods = await self._account.get_2fa_methods()
 
-        menu_options: dict[str, str] = {}
-        for method in self._2fa_methods:
+        menu_options: list[SelectOptionDict] = []
+        for i, method in enumerate(self._2fa_methods):
             if isinstance(method, TrustedDeviceSecondFactorMethod):
-                menu_options[f"acc_2fa_request_{len(menu_options)}"] = "Trusted Device"
+                menu_options.append(
+                    {
+                        "label": "Trusted Device",
+                        "value": str(i),
+                    },
+                )
             elif isinstance(method, SmsSecondFactorMethod):
-                menu_options[f"acc_2fa_request_{len(menu_options)}"] = (
-                    f"SMS - {method.phone_number}"
+                menu_options.append(
+                    {
+                        "label": f"SMS - {method.phone_number}",
+                        "value": str(i),
+                    },
                 )
             else:
                 logging.warning("Unknown 2FA method: %s", method)
@@ -233,9 +229,18 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors={"base": "2fa_unavailable"},
             )
 
-        return self.async_show_menu(
-            step_id="acc_2fa_prompt",
-            menu_options=menu_options,
+        schema = vol.Schema(
+            {
+                "method_id": SelectSelector(
+                    SelectSelectorConfig(
+                        options=menu_options,
+                    ),
+                ),
+            },
+        )
+        return self.async_show_form(
+            step_id="acc_2fa_request",
+            data_schema=schema,
         )
 
     async def async_step_acc_2fa_request(self, info: dict | None) -> FlowResult:
@@ -246,9 +251,9 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="unknown_error")
 
         try:
-            method_id: int = info["method_id"]
+            method_id: int = int(info["method_id"])
             self._2fa_method = self._2fa_methods[method_id]
-        except KeyError:
+        except (KeyError, ValueError):
             _LOGGER.exception("Unable to look up method ID")
             return self.async_abort(reason="unknown_error")
 
@@ -267,23 +272,20 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.error("No 2FA code submitted")
             return self.async_show_form(
                 step_id="2fa_submit",
-                data_schema=DATA_SCHEMA_ACC_LOGIN,
+                data_schema=DATA_SCHEME_ACC_2FA,
             )
 
         if self._2fa_method is None:
             _LOGGER.error("No active 2FA method in the flow")
-            return self.async_show_form(
-                step_id="2fa_prompt",
-                data_schema=DATA_SCHEMA_ACC_LOGIN,
-            )
+            return self.async_abort(reason="unknown_error")
 
         try:
             await self._2fa_method.submit(code)
         except UnhandledProtocolError:
             _LOGGER.exception("Unhandled protocol exception during 2FA submit")
             return self.async_show_form(
-                step_id="acc_2fa_prompt",
-                data_schema=DATA_SCHEMA_ACC_LOGIN,
+                step_id="acc_2fa_submit",
+                data_schema=DATA_SCHEME_ACC_2FA,
                 errors={"base": "2fa_invalid"},
             )
 
