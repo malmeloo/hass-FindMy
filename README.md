@@ -1,18 +1,20 @@
-## FindMy - Home Assistant integration
+# FindMy - Home Assistant integration
 
 Experimental custom integration to provide device tracker entities for FindMy Network-enabled devices.
 
-# UNDER DEVELOPMENT!
-# UNDER DEVELOPMENT!
-# UNDER DEVELOPMENT!
+## Setting up
 
-### Setting up
+1. Add this repository to HACS and install the `FindMy` integration.
+2. Enable the integration. You must add at least two 'devices': one Apple Account and one tracker device.
+   1. When adding an account, you will need to specify an anisette server. You can use a public one, but it
+      might start throwing errors after a while, so private servers are preferred. Google is your friend.
+   2. Currently, only "static" (default OpenHaystack) trackers are supported. Support for official AirTags
+      and other devices/accessories will come soon.
+3. Enjoy!
 
-After dropping the custom component into your home assistant config, you need to
-supply the integration with your private keys. Modify the `device_tracker.py` file
-to add your keys, as strings, in base64 format. For now, only these keys are available.
+## Increasing the update frequency
 
-After doing this and restarting hass, log into your account by adding the "FindMy"
-integration from the GUI.
-
-This is temporary until proper GUI configuration is realized.
+By default, the integration will only use your account to fetch for updates once per 15 minutes. This is to
+reduce the risk of being banned by Apple. If you want to increase the tracker update frequency, it is possible
+to add additional accounts. These accounts will divide the available time; 2 accounts will generate updates every
+7.5 minutes, 3 will update every 5 minutes, etc.
