@@ -6,11 +6,11 @@ from typing import TYPE_CHECKING, Any, Mapping
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
 from homeassistant.components.device_tracker.const import SourceType
 from homeassistant.core import callback
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from findmy.keys import KeyPair
-
+from . import RuntimeStorage
 from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
 
@@ -21,16 +21,9 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from findmy.reports import AsyncAppleAccount
     from findmy.reports.reports import LocationReport
 
 _LOGGER = logging.getLogger(__name__)
-
-# <-- ADD YOUR PRIVATE KEYS HERE! -->
-_KEYS = [
-    "",
-]
-_DEVICES = [KeyPair.from_b64(key) for key in _KEYS]
 
 
 async def async_setup_entry(
@@ -40,12 +33,13 @@ async def async_setup_entry(
 ) -> bool:
     _LOGGER.debug("Setting up device tracker entry: %s", entry.entry_id)
 
-    account: AsyncAppleAccount = hass.data[DOMAIN][entry.entry_id]
-    coordinator = FindMyCoordinator(hass, account)
+    item = RuntimeStorage.get(hass).get_entry(entry)
+    if not isinstance(item, FindMyDevice):
+        msg = "Cannot setup device tracker entity for non-device!"
+        raise ConfigEntryNotReady(msg)
 
-    async_add_entities(FindMyDeviceTracker(coordinator, dev) for dev in _DEVICES)
-
-    await coordinator.async_config_entry_first_refresh()
+    storage = RuntimeStorage.get(hass)
+    async_add_entities((FindMyDeviceTracker(storage.coordinator, item),))
 
     return True
 

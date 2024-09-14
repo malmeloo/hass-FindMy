@@ -1,33 +1,38 @@
 """A custom integration for Home Assistant to track your Find My-enabled devices."""
 
 import logging
-from typing import cast
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
-from findmy.reports import AsyncAppleAccount, RemoteAnisetteProvider
-
 from .config_flow import EntryData
-from .const import DOMAIN
+from .coordinator import FindMyDevice
+from .storage import RuntimeStorage
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.DEVICE_TRACKER]
 
 
+async def async_setup(hass: HomeAssistant, _config: ConfigEntry) -> bool:
+    RuntimeStorage.attach(hass)
+
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[EntryData]) -> bool:
     _LOGGER.debug("Setting up FindMy entry: %s", entry.entry_id)
 
-    data = cast(EntryData, entry.data)
-    anisette = RemoteAnisetteProvider(data["anisette_url"])
-    account = AsyncAppleAccount(anisette)
-    account.restore(data["account_data"])
+    storage = RuntimeStorage.get(hass)
 
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = account
+    item = await storage.add_entry(entry)
+    if isinstance(item, FindMyDevice):
+        # only initialize device tracker entities for actual devices
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await storage.coordinator.reload()
+    await storage.coordinator.async_refresh()
 
     return True
 
@@ -36,8 +41,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry[EntryData])
     _LOGGER.debug("Unloading FindMy entry: %s", entry.entry_id)
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok:
-        account: AsyncAppleAccount = hass.data[DOMAIN].pop(entry.entry_id)
-        await account.close()
+    if not unload_ok:
+        return False
 
-    return unload_ok
+    await RuntimeStorage.get(hass).del_entry(entry)
+
+    return True
