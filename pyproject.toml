@@ -4,13 +4,13 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12,<3.13"
-homeassistant = "^2024.9.1"
-findmy = "^0.7.4"
+homeassistant = "^2024.9.2"
+findmy = "0.7.5"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.6.4"
+ruff = "^0.6.5"
 pre-commit = "^3.8.0"
-pyright = "^1.1.380"
+pyright = "^1.1.381"
 
 [tool.ruff]
 line-length = 100
