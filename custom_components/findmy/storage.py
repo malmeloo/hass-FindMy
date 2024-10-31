@@ -82,6 +82,7 @@ class RuntimeStorage:
 
         if data["type"] == "device_static":
             key = KeyPair.from_b64(data["private_key"])
+            key.name = data["name"]
 
             _LOGGER.debug("Storing entry %s as static tag: %s", entry.entry_id, data["name"])
 

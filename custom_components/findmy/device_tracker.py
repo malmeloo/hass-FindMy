@@ -69,7 +69,7 @@ class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverrid
 
     @property
     def name(self) -> str:  # pyright: ignore [reportIncompatibleVariableOverride]
-        return "FindMy Tracker"
+        return self._device.name or "Unknown"
 
     @property
     def source_type(self) -> SourceType:
