@@ -100,6 +100,12 @@ class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverrid
         return self._last_location.published_at
 
     @property
+    def status(self) -> int | None:
+        if self._last_location is None:
+            return None
+        return self._last_location.status
+
+    @property
     def description(self) -> str | None:
         if self._last_location is None:
             return None
@@ -122,6 +128,7 @@ class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverrid
             "detected_at": self.detected_at,
             "published_at": self.published_at,
             "description": self.description,
+            "status": self.status,
         }
 
     @callback
