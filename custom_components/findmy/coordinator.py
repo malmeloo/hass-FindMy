@@ -42,12 +42,14 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
 
         self._cur_acc_index = 0
 
-    @property
-    def cur_account(self) -> AsyncAppleAccount | None:
+    def get_account(self) -> AsyncAppleAccount | None:
         accounts = self._storage.accounts
         if not accounts:
             return None
-        return accounts[self._cur_acc_index % len(accounts)]
+
+        account = accounts[self._cur_acc_index % len(accounts)]
+        self._cur_acc_index += 1
+        return account
 
     async def reload(self) -> None:
         """Updates coordinator intervals. Must be called after adding or removing a new account."""
@@ -64,7 +66,7 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
         self.update_interval = timedelta(seconds=self._MIN_ACCOUNT_UPDATE_DELAY // len(accounts))
 
     async def _async_update_data(self) -> FindMyLocationData:
-        account = self.cur_account
+        account = self.get_account()
         if account is None:
             _LOGGER.debug("Skipping data update due to missing accounts")
             return {}
