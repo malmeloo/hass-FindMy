@@ -71,6 +71,7 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
         _LOGGER.debug("Using lookup account: %s", account.account_name)
 
         devices: list[FindMyDevice] = list(self.async_contexts())
+        _LOGGER.debug("Fetching reports for devices: %s", devices)
         try:
             async with async_timeout.timeout(10):
                 device_locations = await account.fetch_last_reports(devices)
@@ -78,14 +79,14 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
             _LOGGER.exception("Unauthorized... :c")
             raise ConfigEntryAuthFailed from err
 
-        data: FindMyLocationData = {}
+        data: FindMyLocationData = self.data or {}
         for device, locations in device_locations.items():
+            _LOGGER.debug("Got reports for device: %s - %s", device, len(locations))
             if not isinstance(device, FindMyDevice):
                 _LOGGER.warning("Device not supported yet: %s", device)
                 continue
 
             if not locations:
-                data[device] = None
                 continue
             # gets most recent location
             data[device] = max(locations)
