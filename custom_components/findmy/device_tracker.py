@@ -8,6 +8,7 @@ from homeassistant.components.device_tracker.const import SourceType
 from homeassistant.core import callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import RuntimeStorage
@@ -49,6 +50,8 @@ class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverrid
     TrackerEntity,
 ):
     _attr_has_entity_name = True
+    _attr_name = None
+
     _attr_should_poll = False
 
     def __init__(self, coordinator: FindMyCoordinator, device: FindMyDevice) -> None:
@@ -59,17 +62,25 @@ class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverrid
 
         self._last_location: LocationReport | None = None
 
+        # Define entity id
+        # Set here instead of in a property because it needs a setter, so this is more convenient.
+        self.entity_id = generate_entity_id(
+            "device_tracker.findmy_{}",
+            self.given_name,
+            hass=self._coordinator.hass,
+        )
+
     @property
     def findmy_device(self) -> FindMyDevice:
         return self._device
 
     @property
-    def unique_id(self) -> str:  # pyright: ignore [reportIncompatibleVariableOverride]
-        return self._device.hashed_adv_key_b64
+    def given_name(self) -> str:
+        return self._device.name or "Unknown"
 
     @property
-    def name(self) -> str:  # pyright: ignore [reportIncompatibleVariableOverride]
-        return self._device.name or "Unknown"
+    def unique_id(self) -> str:  # pyright: ignore [reportIncompatibleVariableOverride]
+        return self._device.hashed_adv_key_b64
 
     @property
     def source_type(self) -> SourceType:
@@ -117,7 +128,7 @@ class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverrid
             identifiers={
                 (DOMAIN, self.unique_id),
             },
-            name=self.name,
+            name=self.given_name,
         )
 
     @property
