@@ -81,7 +81,7 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
             _LOGGER.exception("Unauthorized... :c")
             raise ConfigEntryAuthFailed from err
 
-        data: FindMyLocationData = self.data or {}
+        data: FindMyLocationData = (self.data or {}).copy()
         for device, locations in device_locations.items():
             _LOGGER.debug("Got reports for device: %s - %s", device, len(locations))
             if not isinstance(device, FindMyDevice):
