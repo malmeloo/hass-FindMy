@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import logging
+import io
 from typing import TYPE_CHECKING, Literal, TypedDict
 
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import section
-from homeassistant.helpers.selector import SelectOptionDict, SelectSelector, SelectSelectorConfig
+from homeassistant.helpers.selector import SelectOptionDict, SelectSelector, SelectSelectorConfig, TextSelector, TextSelectorConfig
 
 from findmy.accessory import KeyPair
+from findmy.accessory import FindMyAccessory
 from findmy.errors import InvalidCredentialsError, UnhandledProtocolError
 from findmy.reports import AsyncAppleAccount, LoginState, RemoteAnisetteProvider
 from findmy.reports.twofactor import (
@@ -52,12 +54,13 @@ DATA_SCHEME_DEV_CHOOSE = vol.Schema(
     {
         "device_type": SelectSelector(
             SelectSelectorConfig(
-                options=["static"],
+                options=["static", "rolling"],
                 translation_key="device_type",
             ),
         ),
     },
 )
+
 DATA_SCHEME_DEV_STATIC = vol.Schema(
     {
         vol.Required("name"): str,
@@ -65,6 +68,12 @@ DATA_SCHEME_DEV_STATIC = vol.Schema(
     },
 )
 
+DATA_SCHEME_DEV_ROLLING = vol.Schema(
+    {
+        vol.Required("name"): str,
+        vol.Required("plist"): TextSelector(TextSelectorConfig(multiline=True)),
+    },
+)
 
 class LoginFlowAdvancedOptions(TypedDict):
     anisette_url: str
@@ -83,13 +92,16 @@ class MfaSubmitInput(TypedDict):
 
 
 class DeviceTypeInput(TypedDict):
-    device_type: Literal["static"]
+    device_type: Literal["static", "rolling"]
 
 
 class StaticDeviceInput(TypedDict):
     name: str
     private_key: str
 
+class RollingDeviceInput(TypedDict):
+    name: str
+    plist: str
 
 class EntryDataAccount(TypedDict):
     type: Literal["account"]
@@ -102,6 +114,10 @@ class EntryDataStaticDevice(TypedDict):
     name: str
     private_key: str
 
+class EntryDataRollingDevice(TypedDict):
+    type: Literal["device_rolling"]
+    name: str
+    plist: str
 
 type EntryData = EntryDataAccount | EntryDataStaticDevice
 
@@ -172,7 +188,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         self._anisette_url = info["advanced_options"]["anisette_url"]
         anisette = RemoteAnisetteProvider(self._anisette_url)
-        self._account = AsyncAppleAccount(anisette)
+        self._account = AsyncAppleAccount(anisette=anisette)
 
         # Attempt login
         try:
@@ -300,7 +316,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         data = EntryDataAccount(
             type="account",
-            account_data=self._account.export(),
+            account_data=self._account.to_json(),
             anisette_url=self._anisette_url,
         )
 
@@ -329,6 +345,11 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="dev_static",
                 data_schema=DATA_SCHEME_DEV_STATIC,
+            )
+        elif dev_type == "rolling":
+            return self.async_show_form(
+                step_id="dev_rolling",
+                data_schema=DATA_SCHEME_DEV_ROLLING,
             )
 
         return self.async_show_form(
@@ -367,5 +388,39 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_create_entry(
             title=f"Device (Static): {name}",
+            data=data,
+        )
+
+    async def async_step_dev_rolling(self, info: RollingDeviceInput | None = None) -> FlowResult:
+        _LOGGER.debug("%s Step: dev_rolling - %s", self.__class__.__name__, info)
+
+        if not info:
+            return self.async_show_form(
+                step_id="dev_rolling",
+                data_schema=DATA_SCHEME_DEV_ROLLING,
+                errors={"base": "invalid_dev"},
+            )
+
+        name = info.get("name", "Unknown")
+        plist = info.get("plist", "")
+
+        try:
+            plist_io = io.BytesIO(bytes(plist, "utf-8"))
+            FindMyAccessory.from_plist(plist_io)
+        except ValueError:
+            return self.async_show_form(
+                step_id="dev_rolling",
+                data_schema=DATA_SCHEME_DEV_ROLLING,
+                errors={"base": "invalid_dev_key"},
+            )
+
+        data = EntryDataStaticDevice(
+            type="device_rolling",
+            name=name,
+            plist=plist,
+        )
+
+        return self.async_create_entry(
+            title=f"Device (Rolling): {name}",
             data=data,
         )
