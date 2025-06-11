@@ -1,10 +1,10 @@
 from __future__ import annotations
-
+import io
 import logging
 from typing import TYPE_CHECKING, cast
 
 from custom_components.findmy.coordinator import FindMyCoordinator, FindMyDevice
-from findmy.accessory import KeyPair
+from findmy.accessory import KeyPair, FindMyAccessory
 from findmy.reports import AsyncAppleAccount, RemoteAnisetteProvider
 
 from .config_flow import EntryData
@@ -72,8 +72,8 @@ class RuntimeStorage:
 
         if data["type"] == "account":
             anisette = RemoteAnisetteProvider(data["anisette_url"])
-            account = AsyncAppleAccount(anisette)
-            account.restore(data["account_data"])
+            account = AsyncAppleAccount(anisette=anisette)
+            account.from_json(data["account_data"])
 
             _LOGGER.debug("Storing entry %s as account: %s", entry.entry_id, account.account_name)
 
@@ -88,6 +88,16 @@ class RuntimeStorage:
 
             self._entries[entry.entry_id] = key
             return key
+
+        if data["type"] == "device_rolling":
+            plist_io = io.BytesIO(bytes(data["plist"], "utf-8"))
+            accessory = FindMyAccessory.from_plist(plist_io)
+            accessory.name = data["name"]
+
+            _LOGGER.debug("Storing entry %s as rolling tag: %s", entry.entry_id, data["name"])
+
+            self._entries[entry.entry_id] = accessory
+            return accessory
 
         msg = f"Could not match entry {data['type']} with StorageItem!"
         raise ValueError(msg)

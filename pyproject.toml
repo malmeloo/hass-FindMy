@@ -3,9 +3,9 @@ name = "hass-findmy"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.12,<3.13"
+python = "^3.12,<3.14"
 homeassistant = "^2024.10.4"
-findmy = "0.7.5"
+findmy = "0.7.7"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.7.1"

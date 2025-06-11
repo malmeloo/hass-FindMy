@@ -8,8 +8,6 @@ Experimental custom integration to provide device tracker entities for FindMy Ne
 2. Enable the integration. You must add at least two 'devices': one Apple Account and one tracker device.
    1. When adding an account, you will need to specify an anisette server. You can use a public one, but it
       might start throwing errors after a while, so private servers are preferred. Google is your friend.
-   2. Currently, only "static" (default OpenHaystack) trackers are supported. Support for official AirTags
-      and other devices/accessories will come soon.
 3. Enjoy!
 
 ## Increasing the update frequency
