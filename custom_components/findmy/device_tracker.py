@@ -85,7 +85,8 @@ class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverrid
     def unique_id(self) -> str:  # pyright: ignore [reportIncompatibleVariableOverride]
         if isinstance(self._device, KeyPair):
             return self._device.hashed_adv_key_b64
-        elif isinstance(self._device, FindMyAccessory):
+        
+        if isinstance(self._device, FindMyAccessory):
             return self._device.identifier
         
 
