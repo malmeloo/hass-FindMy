@@ -1,16 +1,19 @@
-[tool.poetry]
+[project]
 name = "hass-findmy"
+version="0.0.1"
 package-mode = false
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "homeassistant>=2024.12.5",
+    "findmy>=0.8.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12,<3.13"
-homeassistant = "^2024.10.4"
-findmy = "0.7.5"
-
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.7.1"
-pre-commit = "^4.0.1"
-pyright = "^1.1.381"
+[dependency-groups]
+dev = [
+    "pre-commit>=4.2.0",
+    "pyright>=1.1.402",
+    "ruff>=0.11.13",
+]
 
 [tool.ruff]
 line-length = 100
@@ -27,8 +30,3 @@ ignore = [
 
     "D"  # Documentation
 ]
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
