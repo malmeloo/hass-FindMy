@@ -24,8 +24,6 @@ from .const import DEFAULT_ANISETTE_URL, DOMAIN
 if TYPE_CHECKING:
     from typing import Any
 
-    from homeassistant.data_entry_flow import FlowResult
-
 _LOGGER = logging.getLogger(__name__)
 
 DATA_SCHEMA_ACC_LOGIN = vol.Schema(
@@ -151,7 +149,10 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=DATA_SCHEMA_ACC_LOGIN,
         )
 
-    async def async_step_acc_login(self, info: LoginFlowInput | None) -> FlowResult:
+    async def async_step_acc_login(
+        self,
+        info: LoginFlowInput | None,
+    ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug(
             "%s Step: acc_login - %s",
             self.__class__.__name__,
@@ -159,7 +160,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         if info is None:
-            logging.warning("Login step called without info data")
+            _LOGGER.warning("Login step called without info data")
             return self.async_show_form(
                 step_id="acc_login",
                 data_schema=DATA_SCHEMA_ACC_LOGIN,
@@ -172,7 +173,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         self._anisette_url = info["advanced_options"]["anisette_url"]
         anisette = RemoteAnisetteProvider(self._anisette_url)
-        self._account = AsyncAppleAccount(anisette)
+        self._account = AsyncAppleAccount(anisette=anisette)
 
         # Attempt login
         try:
@@ -193,7 +194,10 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_acc_2fa_prompt()
         return await self.async_step_acc_done()
 
-    async def async_step_acc_2fa_prompt(self, info: dict | None = None) -> FlowResult:
+    async def async_step_acc_2fa_prompt(
+        self,
+        info: dict | None = None,
+    ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug("%s Step: acc_2fa_prompt - %s", self.__class__.__name__, info)
 
         if self._account is None or self._account.login_state != LoginState.REQUIRE_2FA:
@@ -219,7 +223,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     },
                 )
             else:
-                logging.warning("Unknown 2FA method: %s", method)
+                _LOGGER.warning("Unknown 2FA method: %s", method)
                 continue
 
         if not menu_options:
@@ -243,7 +247,10 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=schema,
         )
 
-    async def async_step_acc_2fa_request(self, info: dict | None) -> FlowResult:
+    async def async_step_acc_2fa_request(
+        self,
+        info: dict | None,
+    ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug("%s Step: acc_2fa_request - %s", self.__class__.__name__, info)
 
         if info is None:
@@ -264,7 +271,10 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=DATA_SCHEME_ACC_2FA,
         )
 
-    async def async_step_acc_2fa_submit(self, info: MfaSubmitInput) -> FlowResult:
+    async def async_step_acc_2fa_submit(
+        self,
+        info: MfaSubmitInput,
+    ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug("%s Step: acc_2fa_submit - %s", self.__class__.__name__, info)
 
         code = info.get("code")
@@ -291,7 +301,10 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return await self.async_step_acc_done()
 
-    async def async_step_acc_done(self, info: dict | None = None) -> FlowResult:
+    async def async_step_acc_done(
+        self,
+        info: dict | None = None,
+    ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug("%s Step: acc_done - %s", self.__class__.__name__, info)
 
         if self._anisette_url is None or self._account is None:
@@ -300,7 +313,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         data = EntryDataAccount(
             type="account",
-            account_data=self._account.export(),
+            account_data=self._account.to_json(),
             anisette_url=self._anisette_url,
         )
 
@@ -313,7 +326,10 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ### Device Setup Flow ###
     #########################
 
-    async def async_step_start_dev(self, info: dict | None = None) -> FlowResult:
+    async def async_step_start_dev(
+        self,
+        info: dict | None = None,
+    ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug("%s Step: start_dev - %s", self.__class__.__name__, info)
 
         return self.async_show_form(
@@ -321,7 +337,10 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=DATA_SCHEME_DEV_CHOOSE,
         )
 
-    async def async_step_dev_choose(self, info: DeviceTypeInput | None = None) -> FlowResult:
+    async def async_step_dev_choose(
+        self,
+        info: DeviceTypeInput | None = None,
+    ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug("%s Step: dev_choose - %s", self.__class__.__name__, info)
 
         dev_type = (info or {}).get("device_type", None)
@@ -337,7 +356,10 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors={"base": "invalid_dev"},
         )
 
-    async def async_step_dev_static(self, info: StaticDeviceInput | None = None) -> FlowResult:
+    async def async_step_dev_static(
+        self,
+        info: StaticDeviceInput | None = None,
+    ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug("%s Step: dev_static - %s", self.__class__.__name__, info)
 
         if not info:

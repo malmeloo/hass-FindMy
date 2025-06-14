@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Mapping
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
 from homeassistant.components.device_tracker.const import SourceType
@@ -16,6 +16,7 @@ from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import datetime
 
     from homeassistant.config_entries import ConfigEntry

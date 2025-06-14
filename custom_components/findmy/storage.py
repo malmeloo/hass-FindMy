@@ -7,12 +7,13 @@ from custom_components.findmy.coordinator import FindMyCoordinator, FindMyDevice
 from findmy.accessory import KeyPair
 from findmy.reports import AsyncAppleAccount, RemoteAnisetteProvider
 
-from .config_flow import EntryData
 from .const import DOMAIN
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
+
+    from .config_flow import EntryData
 
 type StorageItem = AsyncAppleAccount | FindMyDevice
 
@@ -68,12 +69,12 @@ class RuntimeStorage:
         return self._entries[entry.entry_id]
 
     async def add_entry(self, entry: ConfigEntry[EntryData]) -> StorageItem:
-        data = cast(EntryData, entry.data)
+        data = cast("EntryData", entry.data)
 
         if data["type"] == "account":
             anisette = RemoteAnisetteProvider(data["anisette_url"])
-            account = AsyncAppleAccount(anisette)
-            account.restore(data["account_data"])
+            account = AsyncAppleAccount(anisette=anisette)
+            account.from_json(data["account_data"])
 
             _LOGGER.debug("Storing entry %s as account: %s", entry.entry_id, account.account_name)
 
