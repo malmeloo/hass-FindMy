@@ -5,7 +5,7 @@ package-mode = false
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "homeassistant>=2024.12.5",
-    "findmy>=0.8.0",
+    "findmy>=0.8.1",
 ]
 
 [dependency-groups]
