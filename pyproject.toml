@@ -19,5 +19,7 @@ ignore = [
     "ANN002", # annotations on `*args`
     "ANN003", # annotations on `**kwargs`
 
+    "S101", # assert
+
     "D", # Documentation
 ]

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from functools import cached_property
+from typing import TYPE_CHECKING, final, override
 
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
 from homeassistant.components.device_tracker.const import SourceType
@@ -11,12 +12,11 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from findmy.keys import KeyPair
-from findmy.accessory import FindMyAccessory
+from findmy import FindMyAccessory, KeyPair
 
-from . import RuntimeStorage
 from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
+from .storage import RuntimeStorage
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -49,7 +49,8 @@ async def async_setup_entry(
     return True
 
 
-class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverride]
+@final
+class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariable, reportIncompatibleVariableOverride]
     CoordinatorEntity[FindMyCoordinator],
     TrackerEntity,
 ):
@@ -83,26 +84,33 @@ class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverrid
         return self._device.name or "Unknown"
 
     @property
+    @override
     def unique_id(self) -> str:  # pyright: ignore [reportIncompatibleVariableOverride]
         if isinstance(self._device, KeyPair):
             return self._device.hashed_adv_key_b64
-        
-        if isinstance(self._device, FindMyAccessory):
-            return self._device.identifier
-        
+
+        assert isinstance(self._device, FindMyAccessory)
+
+        identifier = self._device.identifier
+        if identifier is None:
+            msg = "Device has no identifier"
+            raise ValueError(msg)
+        return identifier
 
     @property
+    @override
     def source_type(self) -> SourceType:
         return SourceType.GPS
 
-    @property
-    def latitude(self) -> float | None:  # pyright: ignore [reportIncompatibleVariableOverride]
+    @cached_property
+    @override
+    def latitude(self) -> float | None:
         if self._last_location is None:
             return None
         return self._last_location.latitude
 
-    @property
-    def longitude(self) -> float | None:  # pyright: ignore [reportIncompatibleVariableOverride]
+    @cached_property
+    def longitude(self) -> float | None:
         if self._last_location is None:
             return None
         return self._last_location.longitude
@@ -114,25 +122,13 @@ class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverrid
         return self._last_location.timestamp
 
     @property
-    def published_at(self) -> datetime | None:
-        if self._last_location is None:
-            return None
-        return self._last_location.published_at
-
-    @property
     def status(self) -> int | None:
         if self._last_location is None:
             return None
         return self._last_location.status
 
-    @property
-    def description(self) -> str | None:
-        if self._last_location is None:
-            return None
-        return self._last_location.description
-
-    @property
-    def device_info(self) -> DeviceInfo:  # pyright: ignore [reportIncompatibleVariableOverride]
+    @cached_property
+    def device_info(self) -> DeviceInfo:
         return DeviceInfo(
             identifiers={
                 (DOMAIN, self.unique_id),
@@ -140,18 +136,17 @@ class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverrid
             name=self.given_name,
         )
 
-    @property
-    def extra_state_attributes(  # pyright: ignore [reportIncompatibleVariableOverride]
+    @cached_property
+    def extra_state_attributes(
         self,
-    ) -> Mapping[str, Any] | None:
+    ) -> Mapping[str, int | datetime | None] | None:
         return {
             "detected_at": self.detected_at,
-            "published_at": self.published_at,
-            "description": self.description,
             "status": self.status,
         }
 
     @callback
+    @override
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self._last_location = (self._coordinator.data or {}).get(self._device)
