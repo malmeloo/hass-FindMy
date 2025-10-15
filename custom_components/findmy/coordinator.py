@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from findmy.errors import UnauthorizedError
 from findmy.keys import KeyPair
+from findmy.accessory import FindMyAccessory
 from findmy.reports.reports import LocationReport
 
 if TYPE_CHECKING:
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-FindMyDevice = KeyPair
+FindMyDevice = KeyPair | FindMyAccessory
 type FindMyLocationData = dict[FindMyDevice, LocationReport | None]
 
 

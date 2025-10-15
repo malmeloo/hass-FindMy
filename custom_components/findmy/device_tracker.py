@@ -11,6 +11,9 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from findmy.keys import KeyPair
+from findmy.accessory import FindMyAccessory
+
 from . import RuntimeStorage
 from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
@@ -81,7 +84,12 @@ class FindMyDeviceTracker(  # pyright: ignore [reportIncompatibleVariableOverrid
 
     @property
     def unique_id(self) -> str:  # pyright: ignore [reportIncompatibleVariableOverride]
-        return self._device.hashed_adv_key_b64
+        if isinstance(self._device, KeyPair):
+            return self._device.hashed_adv_key_b64
+        
+        if isinstance(self._device, FindMyAccessory):
+            return self._device.identifier
+        
 
     @property
     def source_type(self) -> SourceType:
