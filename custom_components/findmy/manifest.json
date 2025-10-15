@@ -7,5 +7,5 @@
   "config_flow": true,
   "documentation": "https://github.com/malmeloo/hass-findmy",
   "issue_tracker": "https://github.com/malmeloo/hass-findmy/issues",
-  "requirements": ["FindMy==0.8.1"]
+  "requirements": ["FindMy==0.9.4"]
 }
