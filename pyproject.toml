@@ -1,30 +1,20 @@
 [project]
 name = "hass-findmy"
-version="0.0.1"
-package-mode = false
-requires-python = ">=3.12,<3.13"
-dependencies = [
-    "homeassistant>=2024.12.5",
-    "findmy>=0.8.1",
-]
+version = "0.0.1"
+requires-python = ">=3.13.2,<3.14"
+dependencies = ["homeassistant>=2025.10.2", "findmy>=0.9.4"]
 
 [dependency-groups]
-dev = [
-    "pre-commit>=4.2.0",
-    "pyright>=1.1.402",
-    "ruff>=0.11.13",
-]
+dev = ["basedpyright>=1.31.7", "pre-commit>=4.3.0", "ruff>=0.14.0"]
 
 [tool.ruff]
 line-length = 100
 
 [tool.ruff.lint]
-select = [
-    "ALL",
-]
+select = ["ALL"]
 ignore = [
     "ANN002", # annotations on `*args`
     "ANN003", # annotations on `**kwargs`
 
-    "D"  # Documentation
+    "D", # Documentation
 ]
