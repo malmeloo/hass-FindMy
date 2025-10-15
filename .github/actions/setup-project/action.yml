@@ -1,0 +1,25 @@
+name: Common Python + UV Setup
+
+inputs:
+  python-version:
+    description: 'The Python version to install'
+    required: false
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
+        python-version: ${{ matrix.python-version }}
+
+    - name: Set up Python
+      if: ${{ inputs.python-version != '' }}
+      shell: bash
+      run: uv python install
+
+    - name: Install dependencies
+      shell: bash
+      run: uv sync --all-extras --all-groups
