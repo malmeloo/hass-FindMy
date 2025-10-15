@@ -7,6 +7,9 @@ dependencies = ["homeassistant>=2025.10.2", "findmy>=0.9.4"]
 [dependency-groups]
 dev = ["basedpyright>=1.31.7", "pre-commit>=4.3.0", "ruff>=0.14.0"]
 
+[tool.pyright]
+reportMissingTypeStubs = false
+
 [tool.ruff]
 line-length = 100
 

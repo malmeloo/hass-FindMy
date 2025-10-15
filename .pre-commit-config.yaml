@@ -5,16 +5,16 @@ repos:
         name: Ruff check
         language: system
         entry: ruff check
-        types: [ python ]
+        types: [python]
 
       - id: ruff-format
         name: Ruff format
         language: system
         entry: ruff format
-        types: [ python ]
+        types: [python]
 
       - id: pyright
         name: Pyright
         language: system
-        entry: pyright
-        types: [ python ]
+        entry: basedpyright
+        types: [python]
