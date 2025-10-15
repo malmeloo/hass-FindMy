@@ -1,0 +1,21 @@
+name: Pre-commit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v5
+
+    - uses: './.github/actions/setup-project'
+    
+    - uses: pre-commit/action@v3.0.1
+    
+    - uses: pre-commit-ci/lite-action@v1.1.0
+      if: always()
