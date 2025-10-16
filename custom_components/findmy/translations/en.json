@@ -51,10 +51,10 @@
       },
       "dev_rolling": {
         "title": "Add a rolling-key device",
-        "description": "Enter the content of .plist file",
+        "description": "Upload your device keys in .json or .plist format.",
         "data": {
           "name": "Name",
-          "plist": "Content of the `.plist` file"
+          "file": "Device keys"
         }
       }
     },

@@ -4,19 +4,20 @@
 
 from __future__ import annotations
 
-import io
+import contextlib
 import logging
 from typing import TYPE_CHECKING, Literal, TypedDict, cast, final, override
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.components.file_upload import process_uploaded_file
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers.selector import (
+    FileSelector,  # pyright: ignore[reportUnknownVariableType]
+    FileSelectorConfig,
     SelectOptionDict,
     SelectSelector,  # pyright: ignore[reportUnknownVariableType]
     SelectSelectorConfig,
-    TextSelector,  # pyright: ignore[reportUnknownVariableType]
-    TextSelectorConfig,
 )
 
 from findmy import (
@@ -41,6 +42,8 @@ from .const import DOMAIN
 
 if TYPE_CHECKING:
     from typing import Any
+
+    from homeassistant.core import HomeAssistant
 
 type AsyncSecondFactorMethod = AsyncSmsSecondFactor | AsyncTrustedDeviceSecondFactor
 
@@ -86,8 +89,8 @@ DATA_SCHEME_DEV_STATIC = vol.Schema(
 
 DATA_SCHEME_DEV_ROLLING = vol.Schema(
     {
-        vol.Required("name"): str,
-        vol.Required("plist"): TextSelector(TextSelectorConfig(multiline=True)),
+        vol.Optional("name"): str,
+        vol.Required("file"): FileSelector(FileSelectorConfig(accept=".json,.plist")),
     },
 )
 
@@ -119,7 +122,7 @@ class StaticDeviceInput(TypedDict):
 
 class RollingDeviceInput(TypedDict):
     name: str
-    plist: str
+    file: str
 
 
 class EntryDataAccount(TypedDict):
@@ -454,18 +457,17 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors={"base": "invalid_dev"},
             )
 
-        name = info.get("name", "Unknown")
-        plist = info.get("plist", "")
+        name = info.get("name", None)
+        file_id = info.get("file", "")
 
-        try:
-            plist_io = io.BytesIO(bytes(plist, "utf-8"))
-            device = FindMyAccessory.from_plist(plist_io)
-        except ValueError:
+        device = await self.hass.async_add_executor_job(_get_device_from_file, self.hass, file_id)
+        if device is None:
             return self.async_show_form(
                 step_id="dev_rolling",
                 data_schema=DATA_SCHEME_DEV_ROLLING,
                 errors={"base": "invalid_dev_key"},
             )
+        device.name = name or device.name or "Unknown"
 
         data = EntryDataRollingDevice(
             type="device_rolling",
@@ -473,6 +475,23 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         return self.async_create_entry(
-            title=f"Device (Rolling): {name}",
+            title=f"Device (Rolling): {device.name}",
             data=data,
         )
+
+
+def _get_device_from_file(hass: HomeAssistant, file_id: str) -> FindMyAccessory | None:
+    """Load a FindMyAccessory from an uploaded file."""
+    with process_uploaded_file(hass, file_id) as f:
+        device = None
+
+        # try plist
+        with contextlib.suppress(ValueError):
+            device = FindMyAccessory.from_plist(f)
+
+        # try json
+        if device is None:
+            with contextlib.suppress(ValueError):
+                device = FindMyAccessory.from_json(f)
+
+    return device
