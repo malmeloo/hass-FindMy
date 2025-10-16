@@ -16,7 +16,7 @@
           "advanced_options": {
             "name": "Advanced options",
             "data": {
-              "anisette_url": "Anisette URL"
+              "anisette_url": "Remote Anisette URL (optional)"
             }
           }
         }

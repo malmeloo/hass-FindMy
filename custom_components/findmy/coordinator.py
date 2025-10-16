@@ -28,7 +28,7 @@ type FindMyLocationData = dict[FindMyDevice, LocationReport | None]
 @final
 class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
     # minimum time (in seconds) between location fetches on an account.
-    _MIN_ACCOUNT_UPDATE_DELAY = 30 * 60
+    _MIN_ACCOUNT_UPDATE_DELAY = 15 * 60
 
     def __init__(self, hass: HomeAssistant, storage: RuntimeStorage) -> None:
         super().__init__(

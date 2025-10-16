@@ -92,9 +92,8 @@ class RuntimeStorage:
 
         if data["type"] == "device_rolling":
             accessory = FindMyAccessory.from_json(data["data"])
-            accessory.name = data["name"]
 
-            _LOGGER.debug("Storing entry %s as rolling tag: %s", entry.entry_id, data["name"])
+            _LOGGER.debug("Storing entry %s as rolling tag: %s", entry.entry_id, accessory.name)
 
             self._entries[entry.entry_id] = accessory
             return accessory

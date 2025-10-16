@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, final, override
 
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
 from homeassistant.components.device_tracker.const import SourceType
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -14,6 +15,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from findmy import FindMyAccessory, KeyPair
 
+from .config_flow import DeviceEntryData
 from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
 from .storage import RuntimeStorage
@@ -26,7 +28,9 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-    from findmy.reports.reports import LocationReport
+    from findmy import LocationReport
+
+    from .config_flow import DeviceEntryData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,7 +48,7 @@ async def async_setup_entry(
         raise ConfigEntryNotReady(msg)
 
     storage = RuntimeStorage.get(hass)
-    async_add_entities((FindMyDeviceTracker(storage.coordinator, item),))
+    async_add_entities((FindMyDeviceTracker(storage.coordinator, item, entry.entry_id),))
 
     return True
 
@@ -59,11 +63,12 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
 
     _attr_should_poll = False
 
-    def __init__(self, coordinator: FindMyCoordinator, device: FindMyDevice) -> None:
+    def __init__(self, coordinator: FindMyCoordinator, device: FindMyDevice, entry_id: str) -> None:
         super().__init__(coordinator, context=device)
 
-        self._coordinator = coordinator
+        self._coordinator: FindMyCoordinator = coordinator
         self._device: FindMyDevice = device
+        self._entry_id: str = entry_id
 
         self._last_location: LocationReport | None = None
 
@@ -102,15 +107,16 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
     def source_type(self) -> SourceType:
         return SourceType.GPS
 
-    @cached_property
+    @property
     @override
-    def latitude(self) -> float | None:
+    def latitude(self) -> float | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         if self._last_location is None:
             return None
         return self._last_location.latitude
 
-    @cached_property
-    def longitude(self) -> float | None:
+    @property
+    @override
+    def longitude(self) -> float | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         if self._last_location is None:
             return None
         return self._last_location.longitude
@@ -127,6 +133,12 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
             return None
         return self._last_location.status
 
+    @property
+    def mac_address(self) -> str | None:
+        if isinstance(self._device, KeyPair):
+            return self._device.mac_address
+        return None
+
     @cached_property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
@@ -136,14 +148,38 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
             name=self.given_name,
         )
 
-    @cached_property
-    def extra_state_attributes(
+    @property
+    @override
+    def extra_state_attributes(  # pyright: ignore[reportIncompatibleVariableOverride]
         self,
-    ) -> Mapping[str, int | datetime | None] | None:
+    ) -> Mapping[str, int | str | datetime | None] | None:
         return {
             "detected_at": self.detected_at,
             "status": self.status,
+            "mac_address": self.mac_address,
         }
+
+    def _update_entry(self) -> None:
+        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        if entry is None:
+            _LOGGER.error("Config entry for device tracker disappeared")
+            return
+
+        if isinstance(self._device, KeyPair):
+            data: DeviceEntryData = {
+                "type": "device_static",
+                "data": self._device.to_json(),
+            }
+        elif isinstance(self._device, FindMyAccessory):  # pyright: ignore[reportUnnecessaryIsInstance]
+            data = {
+                "type": "device_rolling",
+                "data": self._device.to_json(),
+            }
+        else:
+            _LOGGER.error("Unknown device type for entry update: %s", type(self._device))
+            return
+
+        _ = self.hass.config_entries.async_update_entry(entry, data=data)
 
     @callback
     @override
@@ -153,3 +189,5 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
         _LOGGER.debug("Updated data from coordinator: %s", self._last_location)
 
         self.async_write_ha_state()
+
+        self._update_entry()

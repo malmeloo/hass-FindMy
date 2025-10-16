@@ -29,6 +29,7 @@ from findmy import (
     InvalidCredentialsError,
     KeyPair,
     KeyPairMapping,
+    LocalAnisetteProvider,
     LoginState,
     RemoteAnisetteProvider,
     SmsSecondFactorMethod,
@@ -36,7 +37,7 @@ from findmy import (
     UnhandledProtocolError,
 )
 
-from .const import DEFAULT_ANISETTE_URL, DOMAIN
+from .const import DOMAIN
 
 if TYPE_CHECKING:
     from typing import Any
@@ -52,7 +53,7 @@ DATA_SCHEMA_ACC_LOGIN = vol.Schema(
         "advanced_options": section(
             vol.Schema(
                 {
-                    vol.Required("anisette_url", default=DEFAULT_ANISETTE_URL): str,
+                    vol.Optional("anisette_url"): str,
                 },
             ),
             {"collapsed": True},
@@ -92,7 +93,7 @@ DATA_SCHEME_DEV_ROLLING = vol.Schema(
 
 
 class LoginFlowAdvancedOptions(TypedDict):
-    anisette_url: str
+    anisette_url: str | None
 
 
 class LoginFlowInput(TypedDict):
@@ -136,7 +137,8 @@ class EntryDataRollingDevice(TypedDict):
     data: FindMyAccessoryMapping
 
 
-type EntryData = EntryDataAccount | EntryDataStaticDevice
+type DeviceEntryData = EntryDataStaticDevice | EntryDataRollingDevice
+type EntryData = EntryDataAccount | DeviceEntryData
 
 
 @final
@@ -205,10 +207,15 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _ = await self.async_set_unique_id(info["email"].lower())
         self._abort_if_unique_id_configured()
 
-        _LOGGER.info("Log into Apple account: %s", info["email"])
+        _LOGGER.info("Logging into Apple account: %s", info["email"])
 
-        anisette_url = info["advanced_options"]["anisette_url"]
-        anisette = RemoteAnisetteProvider(anisette_url)
+        anisette_url = info.get("advanced_options", {}).get("anisette_url") or None
+        _LOGGER.info("Using Anisette URL: %s", anisette_url or "<integrated>")
+
+        if anisette_url is None:
+            anisette = LocalAnisetteProvider()
+        else:
+            anisette = RemoteAnisetteProvider(anisette_url)
         self._account = AsyncAppleAccount(anisette=anisette)
 
         # Attempt login
