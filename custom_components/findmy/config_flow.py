@@ -433,6 +433,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data_schema=DATA_SCHEME_DEV_STATIC,
                 errors={"base": "invalid_dev_key"},
             )
+        device.name = name or "Unknown"
 
         data = EntryDataStaticDevice(
             type="device_static",
