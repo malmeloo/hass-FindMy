@@ -3,11 +3,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, cast
 
-from custom_components.findmy.coordinator import FindMyCoordinator, FindMyDevice
-from findmy.accessory import KeyPair
-from findmy.reports import AsyncAppleAccount, RemoteAnisetteProvider
+from findmy import AsyncAppleAccount, FindMyAccessory, KeyPair
 
 from .const import DOMAIN
+from .coordinator import FindMyCoordinator, FindMyDevice
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -25,7 +24,7 @@ class RuntimeStorage:
         self._entries: dict[str, StorageItem] = {}
 
         self._hass: HomeAssistant = hass
-        self._coordinator = FindMyCoordinator(self._hass, self)
+        self._coordinator: FindMyCoordinator = FindMyCoordinator(self._hass, self)
 
     @classmethod
     def attach(cls, hass: HomeAssistant) -> RuntimeStorage:
@@ -51,7 +50,7 @@ class RuntimeStorage:
             msg = "No storage attached!"
             raise RuntimeError(msg)
 
-        return hass.data[DOMAIN]
+        return cast("RuntimeStorage", hass.data[DOMAIN])
 
     @property
     def coordinator(self) -> FindMyCoordinator:
@@ -68,27 +67,36 @@ class RuntimeStorage:
     def get_entry(self, entry: ConfigEntry[EntryData]) -> StorageItem:
         return self._entries[entry.entry_id]
 
-    async def add_entry(self, entry: ConfigEntry[EntryData]) -> StorageItem:
-        data = cast("EntryData", entry.data)
+    async def add_entry(self, entry: ConfigEntry) -> StorageItem:
+        data = cast("EntryData", entry.data)  # pyright: ignore[reportInvalidCast]
 
         if data["type"] == "account":
-            anisette = RemoteAnisetteProvider(data["anisette_url"])
-            account = AsyncAppleAccount(anisette=anisette)
-            account.from_json(data["account_data"])
+            account = AsyncAppleAccount.from_json(data["account_data"])
 
-            _LOGGER.debug("Storing entry %s as account: %s", entry.entry_id, account.account_name)
+            _LOGGER.debug(
+                "Storing entry %s as account: %s",
+                entry.entry_id,
+                f"({account.account_name})",  # pyright: ignore[reportUnknownMemberType]
+            )
 
             self._entries[entry.entry_id] = account
             return account
 
         if data["type"] == "device_static":
-            key = KeyPair.from_b64(data["private_key"])
-            key.name = data["name"]
+            key = KeyPair.from_json(data["data"])
 
-            _LOGGER.debug("Storing entry %s as static tag: %s", entry.entry_id, data["name"])
+            _LOGGER.debug("Storing entry %s as static tag: %s", entry.entry_id, key.name)
 
             self._entries[entry.entry_id] = key
             return key
+
+        if data["type"] == "device_rolling":
+            accessory = FindMyAccessory.from_json(data["data"])
+
+            _LOGGER.debug("Storing entry %s as rolling tag: %s", entry.entry_id, accessory.name)
+
+            self._entries[entry.entry_id] = accessory
+            return accessory
 
         msg = f"Could not match entry {data['type']} with StorageItem!"
         raise ValueError(msg)

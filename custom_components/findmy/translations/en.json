@@ -16,7 +16,7 @@
           "advanced_options": {
             "name": "Advanced options",
             "data": {
-              "anisette_url": "Anisette URL"
+              "anisette_url": "Remote Anisette URL (optional)"
             }
           }
         }
@@ -42,11 +42,19 @@
         }
       },
       "dev_static": {
-        "title": "Add a static device",
+        "title": "Add a static-key device",
         "description": "Enter the PRIVATE key of your custom, static-key tag and give it a memorable name.",
         "data": {
           "name": "Name",
           "private_key": "Private key"
+        }
+      },
+      "dev_rolling": {
+        "title": "Add a rolling-key device",
+        "description": "Upload your device keys in .json or .plist format.",
+        "data": {
+          "name": "Name",
+          "file": "Device keys"
         }
       }
     },
@@ -65,7 +73,8 @@
   "selector": {
     "device_type": {
       "options": {
-        "static": "Static-key tag (OpenHaystack)"
+        "static": "Static-key tag (OpenHaystack)",
+        "rolling": "Rolling-key tag (AirTag)"
       }
     }
   }

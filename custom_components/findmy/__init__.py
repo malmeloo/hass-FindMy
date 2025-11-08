@@ -16,7 +16,7 @@ PLATFORMS = [Platform.DEVICE_TRACKER]
 
 
 async def async_setup(hass: HomeAssistant, _config: ConfigEntry) -> bool:
-    RuntimeStorage.attach(hass)
+    _ = RuntimeStorage.attach(hass)
 
     return True
 
@@ -44,6 +44,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry[EntryData])
     if not unload_ok:
         return False
 
-    await RuntimeStorage.get(hass).del_entry(entry)
+    _ = await RuntimeStorage.get(hass).del_entry(entry)
 
     return True

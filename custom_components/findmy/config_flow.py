@@ -1,28 +1,51 @@
+# pyright: reportUnknownParameterType=false, reportExplicitAny=false, reportUnknownMemberType=false
+
 """Integration config flow."""
 
 from __future__ import annotations
 
+import contextlib
 import logging
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict, cast, final, override
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.components.file_upload import process_uploaded_file
 from homeassistant.data_entry_flow import section
-from homeassistant.helpers.selector import SelectOptionDict, SelectSelector, SelectSelectorConfig
-
-from findmy.accessory import KeyPair
-from findmy.errors import InvalidCredentialsError, UnhandledProtocolError
-from findmy.reports import AsyncAppleAccount, LoginState, RemoteAnisetteProvider
-from findmy.reports.twofactor import (
-    AsyncSecondFactorMethod,
-    SmsSecondFactorMethod,
-    TrustedDeviceSecondFactorMethod,
+from homeassistant.helpers.selector import (
+    FileSelector,  # pyright: ignore[reportUnknownVariableType]
+    FileSelectorConfig,
+    SelectOptionDict,
+    SelectSelector,  # pyright: ignore[reportUnknownVariableType]
+    SelectSelectorConfig,
 )
 
-from .const import DEFAULT_ANISETTE_URL, DOMAIN
+from findmy import (
+    AccountStateMapping,
+    AsyncAppleAccount,
+    AsyncSmsSecondFactor,
+    AsyncTrustedDeviceSecondFactor,
+    FindMyAccessory,
+    FindMyAccessoryMapping,
+    InvalidCredentialsError,
+    KeyPair,
+    KeyPairMapping,
+    LocalAnisetteProvider,
+    LoginState,
+    RemoteAnisetteProvider,
+    SmsSecondFactorMethod,
+    TrustedDeviceSecondFactorMethod,
+    UnhandledProtocolError,
+)
+
+from .const import DOMAIN
 
 if TYPE_CHECKING:
     from typing import Any
+
+    from homeassistant.core import HomeAssistant
+
+type AsyncSecondFactorMethod = AsyncSmsSecondFactor | AsyncTrustedDeviceSecondFactor
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,7 +56,7 @@ DATA_SCHEMA_ACC_LOGIN = vol.Schema(
         "advanced_options": section(
             vol.Schema(
                 {
-                    vol.Required("anisette_url", default=DEFAULT_ANISETTE_URL): str,
+                    vol.Optional("anisette_url"): str,
                 },
             ),
             {"collapsed": True},
@@ -50,12 +73,13 @@ DATA_SCHEME_DEV_CHOOSE = vol.Schema(
     {
         "device_type": SelectSelector(
             SelectSelectorConfig(
-                options=["static"],
+                options=["static", "rolling"],
                 translation_key="device_type",
             ),
         ),
     },
 )
+
 DATA_SCHEME_DEV_STATIC = vol.Schema(
     {
         vol.Required("name"): str,
@@ -63,9 +87,16 @@ DATA_SCHEME_DEV_STATIC = vol.Schema(
     },
 )
 
+DATA_SCHEME_DEV_ROLLING = vol.Schema(
+    {
+        vol.Optional("name"): str,
+        vol.Required("file"): FileSelector(FileSelectorConfig(accept=".json,.plist")),
+    },
+)
+
 
 class LoginFlowAdvancedOptions(TypedDict):
-    anisette_url: str
+    anisette_url: str | None
 
 
 class LoginFlowInput(TypedDict):
@@ -81,7 +112,7 @@ class MfaSubmitInput(TypedDict):
 
 
 class DeviceTypeInput(TypedDict):
-    device_type: Literal["static"]
+    device_type: Literal["static", "rolling"]
 
 
 class StaticDeviceInput(TypedDict):
@@ -89,37 +120,47 @@ class StaticDeviceInput(TypedDict):
     private_key: str
 
 
+class RollingDeviceInput(TypedDict):
+    name: str
+    file: str
+
+
 class EntryDataAccount(TypedDict):
     type: Literal["account"]
-    account_data: dict[Any, Any]
-    anisette_url: str
+    account_data: AccountStateMapping
 
 
 class EntryDataStaticDevice(TypedDict):
     type: Literal["device_static"]
-    name: str
-    private_key: str
+    data: KeyPairMapping
 
 
-type EntryData = EntryDataAccount | EntryDataStaticDevice
+class EntryDataRollingDevice(TypedDict):
+    type: Literal["device_rolling"]
+    data: FindMyAccessoryMapping
 
 
+type DeviceEntryData = EntryDataStaticDevice | EntryDataRollingDevice
+type EntryData = EntryDataAccount | DeviceEntryData
+
+
+@final
 class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for initial setup."""
 
     VERSION, MINOR_VERSION = 1, 1
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args, **kwargs) -> None:  # pyright: ignore[reportMissingParameterType]
         """Initialize."""
         super().__init__(*args, **kwargs)
 
-        self._anisette_url: str | None = None
         self._account: AsyncAppleAccount | None = None
         self._2fa_method: AsyncSecondFactorMethod | None = None
 
         self._error: Exception | None = None
         self._2fa_methods: list[AsyncSecondFactorMethod] = []
 
+    @override
     async def async_step_user(
         self,
         user_input: dict[str, Any] | None = None,
@@ -166,13 +207,18 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data_schema=DATA_SCHEMA_ACC_LOGIN,
             )
 
-        await self.async_set_unique_id(info["email"].lower())
+        _ = await self.async_set_unique_id(info["email"].lower())
         self._abort_if_unique_id_configured()
 
-        _LOGGER.info("Log into Apple account: %s", info["email"])
+        _LOGGER.info("Logging into Apple account: %s", info["email"])
 
-        self._anisette_url = info["advanced_options"]["anisette_url"]
-        anisette = RemoteAnisetteProvider(self._anisette_url)
+        anisette_url = info.get("advanced_options", {}).get("anisette_url") or None
+        _LOGGER.info("Using Anisette URL: %s", anisette_url or "<integrated>")
+
+        if anisette_url is None:
+            anisette = LocalAnisetteProvider()
+        else:
+            anisette = RemoteAnisetteProvider(anisette_url)
         self._account = AsyncAppleAccount(anisette=anisette)
 
         # Attempt login
@@ -196,7 +242,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_acc_2fa_prompt(
         self,
-        info: dict | None = None,
+        info: dict[Any, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug("%s Step: acc_2fa_prompt - %s", self.__class__.__name__, info)
 
@@ -204,7 +250,10 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             _LOGGER.error("2FA step called but account configured incorrectly")
             return self.async_abort(reason="unknown_error")
 
-        self._2fa_methods = await self._account.get_2fa_methods()
+        self._2fa_methods = cast(
+            "list[AsyncSecondFactorMethod]",
+            await self._account.get_2fa_methods(),
+        )
 
         menu_options: list[SelectOptionDict] = []
         for i, method in enumerate(self._2fa_methods):
@@ -215,7 +264,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "value": str(i),
                     },
                 )
-            elif isinstance(method, SmsSecondFactorMethod):
+            elif isinstance(method, SmsSecondFactorMethod):  # pyright: ignore[reportUnnecessaryIsInstance]
                 menu_options.append(
                     {
                         "label": f"SMS - {method.phone_number}",
@@ -249,7 +298,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_acc_2fa_request(
         self,
-        info: dict | None,
+        info: dict[Any, Any] | None,
     ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug("%s Step: acc_2fa_request - %s", self.__class__.__name__, info)
 
@@ -258,7 +307,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="unknown_error")
 
         try:
-            method_id: int = int(info["method_id"])
+            method_id: int = int(cast("int", info["method_id"]))
             self._2fa_method = self._2fa_methods[method_id]
         except (KeyError, ValueError):
             _LOGGER.exception("Unable to look up method ID")
@@ -290,7 +339,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="unknown_error")
 
         try:
-            await self._2fa_method.submit(code)
+            _ = await self._2fa_method.submit(code)
         except UnhandledProtocolError:
             _LOGGER.exception("Unhandled protocol exception during 2FA submit")
             return self.async_show_form(
@@ -303,18 +352,17 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_acc_done(
         self,
-        info: dict | None = None,
+        info: dict[Any, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug("%s Step: acc_done - %s", self.__class__.__name__, info)
 
-        if self._anisette_url is None or self._account is None:
-            _LOGGER.exception("No anisette url or account configured")
+        if self._account is None:
+            _LOGGER.exception("No account configured")
             return self.async_abort(reason="unknown_error")
 
         data = EntryDataAccount(
             type="account",
             account_data=self._account.to_json(),
-            anisette_url=self._anisette_url,
         )
 
         return self.async_create_entry(
@@ -328,7 +376,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_start_dev(
         self,
-        info: dict | None = None,
+        info: dict[Any, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         _LOGGER.debug("%s Step: start_dev - %s", self.__class__.__name__, info)
 
@@ -348,6 +396,11 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="dev_static",
                 data_schema=DATA_SCHEME_DEV_STATIC,
+            )
+        if dev_type == "rolling":
+            return self.async_show_form(
+                step_id="dev_rolling",
+                data_schema=DATA_SCHEME_DEV_ROLLING,
             )
 
         return self.async_show_form(
@@ -373,7 +426,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         key = info.get("private_key", "")
 
         try:
-            KeyPair.from_b64(key)
+            device = KeyPair.from_b64(key)
         except ValueError:
             return self.async_show_form(
                 step_id="dev_static",
@@ -383,11 +436,62 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         data = EntryDataStaticDevice(
             type="device_static",
-            name=name,
-            private_key=key,
+            data=device.to_json(),
         )
 
         return self.async_create_entry(
             title=f"Device (Static): {name}",
             data=data,
         )
+
+    async def async_step_dev_rolling(
+        self,
+        info: RollingDeviceInput | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        _LOGGER.debug("%s Step: dev_rolling - %s", self.__class__.__name__, info)
+
+        if not info:
+            return self.async_show_form(
+                step_id="dev_rolling",
+                data_schema=DATA_SCHEME_DEV_ROLLING,
+                errors={"base": "invalid_dev"},
+            )
+
+        name = info.get("name", None)
+        file_id = info.get("file", "")
+
+        device = await self.hass.async_add_executor_job(_get_device_from_file, self.hass, file_id)
+        if device is None:
+            return self.async_show_form(
+                step_id="dev_rolling",
+                data_schema=DATA_SCHEME_DEV_ROLLING,
+                errors={"base": "invalid_dev_key"},
+            )
+        device.name = name or device.name or "Unknown"
+
+        data = EntryDataRollingDevice(
+            type="device_rolling",
+            data=device.to_json(),
+        )
+
+        return self.async_create_entry(
+            title=f"Device (Rolling): {device.name}",
+            data=data,
+        )
+
+
+def _get_device_from_file(hass: HomeAssistant, file_id: str) -> FindMyAccessory | None:
+    """Load a FindMyAccessory from an uploaded file."""
+    with process_uploaded_file(hass, file_id) as f:
+        device = None
+
+        # try plist
+        with contextlib.suppress(ValueError):
+            device = FindMyAccessory.from_plist(f)
+
+        # try json
+        if device is None:
+            with contextlib.suppress(ValueError):
+                device = FindMyAccessory.from_json(f)
+
+    return device

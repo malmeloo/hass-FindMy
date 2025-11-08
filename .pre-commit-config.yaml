@@ -4,17 +4,17 @@ repos:
       - id: ruff-check
         name: Ruff check
         language: system
-        entry: ruff check
-        types: [ python ]
+        entry: uv run ruff check
+        types: [python]
 
       - id: ruff-format
         name: Ruff format
         language: system
-        entry: ruff format
-        types: [ python ]
+        entry: uv run ruff format
+        types: [python]
 
       - id: pyright
         name: Pyright
         language: system
-        entry: pyright
-        types: [ python ]
+        entry: uv run basedpyright
+        types: [python]
