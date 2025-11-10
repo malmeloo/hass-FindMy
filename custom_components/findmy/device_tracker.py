@@ -153,11 +153,18 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
     def extra_state_attributes(  # pyright: ignore[reportIncompatibleVariableOverride]
         self,
     ) -> Mapping[str, int | str | datetime | None] | None:
-        return {
+        attrs = {
             "detected_at": self.detected_at,
             "status": self.status,
             "mac_address": self.mac_address,
         }
+
+        if isinstance(self._device, FindMyAccessory):
+            # TODO(malmeloo): make properties public in FindMy.py  # noqa: FIX002, TD003
+            attrs["alignment_index"] = self._device._alignment_index  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+            attrs["alignment_date"] = self._device._alignment_date  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
+
+        return attrs
 
     def _update_entry(self) -> None:
         entry = self.hass.config_entries.async_get_entry(self._entry_id)
