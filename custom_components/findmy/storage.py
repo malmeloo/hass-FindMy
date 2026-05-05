@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, cast
 
-from findmy import AsyncAppleAccount, FindMyAccessory, KeyPair
+from findmy import AsyncAppleAccount, FindMyAccessory, FixedRollingKeyPairAccessory, KeyPair
 
 from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
@@ -90,10 +90,26 @@ class RuntimeStorage:
             self._entries[entry.entry_id] = key
             return key
 
-        if data["type"] == "device_rolling":
+        if data["type"] == "device_rolling_derived":
             accessory = FindMyAccessory.from_json(data["data"])
 
-            _LOGGER.debug("Storing entry %s as rolling tag: %s", entry.entry_id, accessory.name)
+            _LOGGER.debug(
+                "Storing entry %s as rolling (derived) tag: %s",
+                entry.entry_id,
+                accessory.name,
+            )
+
+            self._entries[entry.entry_id] = accessory
+            return accessory
+
+        if data["type"] == "device_rolling_pre_generated":
+            accessory = FixedRollingKeyPairAccessory.from_json(data["data"])
+
+            _LOGGER.debug(
+                "Storing entry %s as rolling (pre-generated) tag: %s",
+                entry.entry_id,
+                accessory.name,
+            )
 
             self._entries[entry.entry_id] = accessory
             return accessory

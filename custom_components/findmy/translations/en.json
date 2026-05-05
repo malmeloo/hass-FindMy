@@ -49,9 +49,17 @@
           "private_key": "Private key"
         }
       },
-      "dev_rolling": {
-        "title": "Add a rolling-key device",
+      "dev_rolling_derived": {
+        "title": "Add a rolling-key device with derived keys",
         "description": "Upload your device keys in .json or .plist format.",
+        "data": {
+          "name": "Name",
+          "file": "Device keys"
+        }
+      },
+      "dev_rolling_pre_generated": {
+        "title": "Add a rolling-key device with pre-generated keys",
+        "description": "Upload your device keys in .json format.",
         "data": {
           "name": "Name",
           "file": "Device keys"
@@ -74,7 +82,8 @@
     "device_type": {
       "options": {
         "static": "Static-key tag (OpenHaystack)",
-        "rolling": "Rolling-key tag (AirTag)"
+        "rolling_derived": "Rolling-key tag (AirTag)",
+        "rolling_pre_generated": "Rolling-key tag (pre-generated)"
       }
     }
   }

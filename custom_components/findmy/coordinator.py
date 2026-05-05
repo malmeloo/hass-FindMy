@@ -9,7 +9,13 @@ from typing import TYPE_CHECKING, final, override
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from findmy import FindMyAccessory, KeyPair, LocationReport, UnauthorizedError
+from findmy import (
+    FindMyAccessory,
+    FixedRollingKeyPairAccessory,
+    KeyPair,
+    LocationReport,
+    UnauthorizedError,
+)
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -20,7 +26,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-FindMyDevice = KeyPair | FindMyAccessory
+FindMyDevice = KeyPair | FindMyAccessory | FixedRollingKeyPairAccessory
 type FindMyLocationData = dict[FindMyDevice, LocationReport | None]
 
 
