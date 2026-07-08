@@ -1,0 +1,18 @@
+delete_devices:
+  name: Delete FindMy devices
+  description: >-
+    Removes multiple FindMy device config entries at once. Never touches
+    account entries. Useful for cleaning up bulk imports without clicking
+    through each entry.
+  fields:
+    filter:
+      name: Filter
+      description: Which subset of devices to remove
+      default: all
+      required: false
+      selector:
+        select:
+          options:
+            - all
+            - static
+            - rolling

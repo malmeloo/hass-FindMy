@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 
 from .config_flow import EntryData
 from .coordinator import FindMyDevice
+from .services import async_register as _async_register_services
 from .storage import RuntimeStorage
 
 _LOGGER = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ PLATFORMS = [Platform.DEVICE_TRACKER]
 
 async def async_setup(hass: HomeAssistant, _config: ConfigEntry) -> bool:
     _ = RuntimeStorage.attach(hass)
+    _async_register_services(hass)
 
     return True
 
