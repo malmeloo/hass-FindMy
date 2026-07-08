@@ -7,6 +7,7 @@ from findmy import AsyncAppleAccount, FindMyAccessory, KeyPair
 
 from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
+from .openhaystack import OpenHaystackAccessory
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -97,6 +98,17 @@ class RuntimeStorage:
 
             self._entries[entry.entry_id] = accessory
             return accessory
+
+        if data["type"] == "device_openhaystack":
+            oh = OpenHaystackAccessory.from_json(data["data"])
+
+            _LOGGER.debug(
+                "Storing entry %s as OpenHaystack tag: %s (%d keys)",
+                entry.entry_id, oh.name, len(oh.keypairs),
+            )
+
+            self._entries[entry.entry_id] = oh
+            return oh
 
         msg = f"Could not match entry {data['type']} with StorageItem!"
         raise ValueError(msg)

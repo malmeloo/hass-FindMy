@@ -18,6 +18,7 @@ from findmy import FindMyAccessory, KeyPair
 from .config_flow import DeviceEntryData
 from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
+from .openhaystack import OpenHaystackAccessory
 from .storage import RuntimeStorage
 
 if TYPE_CHECKING:
@@ -94,6 +95,9 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
         if isinstance(self._device, KeyPair):
             return self._device.hashed_adv_key_b64
 
+        if isinstance(self._device, OpenHaystackAccessory):
+            return self._device.identifier
+
         assert isinstance(self._device, FindMyAccessory)
 
         identifier = self._device.identifier
@@ -137,6 +141,9 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
     def mac_address(self) -> str | None:
         if isinstance(self._device, KeyPair):
             return self._device.mac_address
+        if isinstance(self._device, OpenHaystackAccessory):
+            # The tag rotates its MAC; report the leader key's MAC as a placeholder.
+            return self._device.keypairs[0].mac_address
         return None
 
     @cached_property
@@ -164,6 +171,9 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
             attrs["alignment_index"] = self._device._alignment_index  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
             attrs["alignment_date"] = self._device._alignment_date  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
 
+        if isinstance(self._device, OpenHaystackAccessory):
+            attrs["key_count"] = len(self._device.keypairs)
+
         return attrs
 
     def _update_entry(self) -> None:
@@ -175,6 +185,11 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
         if isinstance(self._device, KeyPair):
             data: DeviceEntryData = {
                 "type": "device_static",
+                "data": self._device.to_json(),
+            }
+        elif isinstance(self._device, OpenHaystackAccessory):
+            data = {
+                "type": "device_openhaystack",
                 "data": self._device.to_json(),
             }
         elif isinstance(self._device, FindMyAccessory):  # pyright: ignore[reportUnnecessaryIsInstance]

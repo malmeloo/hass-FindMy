@@ -8,6 +8,14 @@ Experimental custom integration to provide device tracker entities for FindMy Ne
 2. Enable the integration. You must add at least two 'devices': one Apple Account and one tracker device.
    1. When adding an account, you will need to specify an anisette server. You can use a public one, but it
       might start throwing errors after a while, so private servers are preferred. Google is your friend.
+   2. When adding a tracker, choose the type that matches your firmware:
+      - **Static** — single-key OpenHaystack tag (paste the private key)
+      - **Rolling** — real AirTag / FindMy accessory (upload the .plist)
+      - **OpenHaystack rotating** — firmware that rotates through a pre-generated
+        key list (upload the `devices.json` produced by OpenHaystack /
+        Macless-Haystack). All keys are polled in one Apple API call per
+        interval; the freshest report is surfaced on a single HA entity.
+        Uploading a file with multiple devices imports them in bulk.
 3. Enjoy!
 
 ## Increasing the update frequency

@@ -11,6 +11,8 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from findmy import FindMyAccessory, KeyPair, LocationReport, UnauthorizedError
 
+from .openhaystack import OpenHaystackAccessory
+
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
@@ -20,7 +22,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-FindMyDevice = KeyPair | FindMyAccessory
+FindMyDevice = KeyPair | FindMyAccessory | OpenHaystackAccessory
 type FindMyLocationData = dict[FindMyDevice, LocationReport | None]
 
 
@@ -73,18 +75,44 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
             return {}
         _LOGGER.debug("Using lookup account: %s", account)
 
-        devices: list[FindMyDevice] = list(self.async_contexts())
-        _LOGGER.debug("Fetching reports for devices: %s", devices)
+        contexts: list[FindMyDevice] = list(self.async_contexts())
+
+        # Flatten OpenHaystackAccessory wrappers into their constituent KeyPairs
+        # so the FindMy library's fetch_location gets a flat list.  We remember
+        # which KeyPair belongs to which wrapper so we can aggregate results.
+        flat: list[KeyPair | FindMyAccessory] = []
+        owner_of: dict[KeyPair, OpenHaystackAccessory] = {}
+        for ctx in contexts:
+            if isinstance(ctx, OpenHaystackAccessory):
+                for kp in ctx.keypairs:
+                    flat.append(kp)
+                    owner_of[kp] = ctx
+            else:
+                flat.append(ctx)
+
+        _LOGGER.debug(
+            "Fetching reports for %d contexts (flattened to %d keys)",
+            len(contexts), len(flat),
+        )
         try:
-            device_reports = await account.fetch_location(devices)
+            device_reports = await account.fetch_location(flat)
         except UnauthorizedError as err:
             _LOGGER.exception("Unauthorized... :c")
             raise ConfigEntryAuthFailed from err
 
         data: FindMyLocationData = (self.data or {}).copy()
         for device, report in device_reports.items():
-            _LOGGER.debug("Got reports for device: %s - %s", device, report)
-            if not isinstance(device, FindMyDevice):
+            _LOGGER.debug("Got report for %s: %s", device, report)
+
+            # Route the report back to an OpenHaystack wrapper if applicable
+            if isinstance(device, KeyPair) and device in owner_of:
+                wrapper = owner_of[device]
+                existing = data.get(wrapper)
+                if report and (existing is None or report.timestamp > existing.timestamp):
+                    data[wrapper] = report
+                continue
+
+            if not isinstance(device, (KeyPair, FindMyAccessory)):
                 _LOGGER.warning("Device not supported yet: %s", device)
                 continue
 
