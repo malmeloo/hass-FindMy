@@ -1,0 +1,95 @@
+blueprint:
+  name: FindMy tag - stale report warning
+  description: >-
+    Warns when a FindMy tag hasn't reported its location for a specified
+    number of hours. Useful to catch dead batteries or firmware crashes early.
+  domain: automation
+  source_url: https://github.com/malmeloo/hass-FindMy/blob/main/blueprints/automation/tag_stale.yaml
+
+  input:
+    tag_entity:
+      name: FindMy tag
+      description: The device_tracker to monitor
+      selector:
+        entity:
+          filter:
+            - integration: findmy
+              domain: device_tracker
+    stale_hours:
+      name: Stale threshold
+      description: Number of hours without a fresh report before triggering
+      default: 24
+      selector:
+        number:
+          min: 1
+          max: 168
+          step: 1
+          unit_of_measurement: h
+          mode: box
+    check_interval_min:
+      name: Check every N minutes
+      description: How often to evaluate the stale condition
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 240
+          step: 5
+          unit_of_measurement: min
+    notify_service:
+      name: Notification target
+      description: >-
+        Service name like `notify.mobile_app_myphone`. Leave empty for a
+        persistent notification.
+      default: ""
+      selector:
+        text: {}
+
+variables:
+  stale_hours_var: !input stale_hours
+  notify_service_var: !input notify_service
+
+trigger:
+  - platform: time_pattern
+    minutes: !input check_interval_min
+
+condition:
+  - condition: template
+    value_template: >-
+      {% set detected = state_attr(trigger.event_data.entity_id | default('sensor.dummy'), 'detected_at')
+                        or state_attr('{{ trigger.entity_id }}', 'detected_at') %}
+      {# Trigger platform time_pattern has no entity, so we recompute below in action #}
+      true
+
+action:
+  - variables:
+      entity_id_var: !input tag_entity
+      detected_at_raw: "{{ state_attr(entity_id_var, 'detected_at') }}"
+      detected_at_ts: >-
+        {% if detected_at_raw %}
+          {{ as_timestamp(detected_at_raw) }}
+        {% else %}
+          0
+        {% endif %}
+      now_ts: "{{ as_timestamp(now()) }}"
+      age_h: "{{ ((now_ts - (detected_at_ts | float(0))) / 3600) | round(1) }}"
+      tag_name: "{{ state_attr(entity_id_var, 'friendly_name') or entity_id_var }}"
+      message: >-
+        {{ tag_name }} hasn't reported for {{ age_h }} h
+        (threshold: {{ stale_hours_var }} h).
+  - condition: template
+    value_template: >-
+      {{ detected_at_ts | float(0) > 0
+         and (now_ts - detected_at_ts | float(0)) > stale_hours_var * 3600 }}
+  - choose:
+      - conditions: "{{ notify_service_var | length > 0 }}"
+        sequence:
+          - service: "{{ notify_service_var }}"
+            data:
+              title: "FindMy: stale tag"
+              message: "{{ message }}"
+    default:
+      - service: persistent_notification.create
+        data:
+          title: "FindMy: stale tag"
+          message: "{{ message }}"
