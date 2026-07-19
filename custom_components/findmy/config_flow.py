@@ -27,6 +27,8 @@ from findmy import (
     AsyncTrustedDeviceSecondFactor,
     FindMyAccessory,
     FindMyAccessoryMapping,
+    FixedRollingKeyPairAccessory,
+    FixedRollingKeyPairAccessoryMapping,
     InvalidCredentialsError,
     KeyPair,
     KeyPairMapping,
@@ -38,7 +40,7 @@ from findmy import (
     UnhandledProtocolError,
 )
 
-from .const import DOMAIN
+from .const import CONFIG_FLOW_VERSION_MAJOR, CONFIG_FLOW_VERSION_MINOR, DOMAIN
 
 if TYPE_CHECKING:
     from typing import Any
@@ -73,7 +75,7 @@ DATA_SCHEME_DEV_CHOOSE = vol.Schema(
     {
         "device_type": SelectSelector(
             SelectSelectorConfig(
-                options=["static", "rolling"],
+                options=["static", "rolling_derived", "rolling_pre_generated"],
                 translation_key="device_type",
             ),
         ),
@@ -87,10 +89,17 @@ DATA_SCHEME_DEV_STATIC = vol.Schema(
     },
 )
 
-DATA_SCHEME_DEV_ROLLING = vol.Schema(
+DATA_SCHEME_DEV_ROLLING_DERIVED = vol.Schema(
     {
         vol.Optional("name"): str,
         vol.Required("file"): FileSelector(FileSelectorConfig(accept=".json,.plist")),
+    },
+)
+
+DATA_SCHEME_DEV_ROLLING_PRE_GENERATED = vol.Schema(
+    {
+        vol.Optional("name"): str,
+        vol.Required("file"): FileSelector(FileSelectorConfig(accept=".json")),
     },
 )
 
@@ -112,7 +121,7 @@ class MfaSubmitInput(TypedDict):
 
 
 class DeviceTypeInput(TypedDict):
-    device_type: Literal["static", "rolling"]
+    device_type: Literal["static", "rolling_derived", "rolling_pre_generated"]
 
 
 class StaticDeviceInput(TypedDict):
@@ -135,12 +144,19 @@ class EntryDataStaticDevice(TypedDict):
     data: KeyPairMapping
 
 
-class EntryDataRollingDevice(TypedDict):
-    type: Literal["device_rolling"]
+class EntryDataRollingDerivedDevice(TypedDict):
+    type: Literal["device_rolling_derived"]
     data: FindMyAccessoryMapping
 
 
-type DeviceEntryData = EntryDataStaticDevice | EntryDataRollingDevice
+class EntryDataRollingPreGeneratedDevice(TypedDict):
+    type: Literal["device_rolling_pre_generated"]
+    data: FixedRollingKeyPairAccessoryMapping
+
+
+type DeviceEntryData = (
+    EntryDataStaticDevice | EntryDataRollingDerivedDevice | EntryDataRollingPreGeneratedDevice
+)
 type EntryData = EntryDataAccount | DeviceEntryData
 
 
@@ -148,7 +164,7 @@ type EntryData = EntryDataAccount | DeviceEntryData
 class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for initial setup."""
 
-    VERSION, MINOR_VERSION = 1, 1
+    VERSION, MINOR_VERSION = CONFIG_FLOW_VERSION_MAJOR, CONFIG_FLOW_VERSION_MINOR
 
     def __init__(self, *args, **kwargs) -> None:  # pyright: ignore[reportMissingParameterType]
         """Initialize."""
@@ -397,10 +413,15 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="dev_static",
                 data_schema=DATA_SCHEME_DEV_STATIC,
             )
-        if dev_type == "rolling":
+        if dev_type == "rolling_derived":
             return self.async_show_form(
-                step_id="dev_rolling",
-                data_schema=DATA_SCHEME_DEV_ROLLING,
+                step_id="dev_rolling_derived",
+                data_schema=DATA_SCHEME_DEV_ROLLING_DERIVED,
+            )
+        if dev_type == "rolling_pre_generated":
+            return self.async_show_form(
+                step_id="dev_rolling_pre_generated",
+                data_schema=DATA_SCHEME_DEV_ROLLING_PRE_GENERATED,
             )
 
         return self.async_show_form(
@@ -445,43 +466,86 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data=data,
         )
 
-    async def async_step_dev_rolling(
+    async def async_step_dev_rolling_derived(
         self,
         info: RollingDeviceInput | None = None,
     ) -> config_entries.ConfigFlowResult:
-        _LOGGER.debug("%s Step: dev_rolling - %s", self.__class__.__name__, info)
+        _LOGGER.debug("%s Step: dev_rolling_derived - %s", self.__class__.__name__, info)
 
         if not info:
             return self.async_show_form(
-                step_id="dev_rolling",
-                data_schema=DATA_SCHEME_DEV_ROLLING,
+                step_id="dev_rolling_derived",
+                data_schema=DATA_SCHEME_DEV_ROLLING_DERIVED,
                 errors={"base": "invalid_dev"},
             )
 
         name = info.get("name", None)
         file_id = info.get("file", "")
 
-        device = await self.hass.async_add_executor_job(_get_device_from_file, self.hass, file_id)
+        device = await self.hass.async_add_executor_job(
+            _get_derived_key_device_from_file,
+            self.hass,
+            file_id,
+        )
         if device is None:
             return self.async_show_form(
-                step_id="dev_rolling",
-                data_schema=DATA_SCHEME_DEV_ROLLING,
+                step_id="dev_rolling_derived",
+                data_schema=DATA_SCHEME_DEV_ROLLING_DERIVED,
                 errors={"base": "invalid_dev_key"},
             )
         device.name = name or device.name or "Unknown"
 
-        data = EntryDataRollingDevice(
-            type="device_rolling",
+        data = EntryDataRollingDerivedDevice(
+            type="device_rolling_derived",
             data=device.to_json(),
         )
 
         return self.async_create_entry(
-            title=f"Device (Rolling): {device.name}",
+            title=f"Device (Rolling, derived): {device.name}",
+            data=data,
+        )
+
+    async def async_step_dev_rolling_pre_generated(
+        self,
+        info: RollingDeviceInput | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        _LOGGER.debug("%s Step: dev_rolling_pre_generated - %s", self.__class__.__name__, info)
+
+        if not info:
+            return self.async_show_form(
+                step_id="dev_rolling_pre_generated",
+                data_schema=DATA_SCHEME_DEV_ROLLING_PRE_GENERATED,
+                errors={"base": "invalid_dev"},
+            )
+
+        name = info.get("name", None)
+        file_id = info.get("file", "")
+
+        device = await self.hass.async_add_executor_job(
+            _get_pre_generated_key_device_from_file,
+            self.hass,
+            file_id,
+        )
+        if device is None:
+            return self.async_show_form(
+                step_id="dev_rolling_pre_generated",
+                data_schema=DATA_SCHEME_DEV_ROLLING_PRE_GENERATED,
+                errors={"base": "invalid_dev_key"},
+            )
+        device.name = name or device.name or "Unknown"
+
+        data = EntryDataRollingPreGeneratedDevice(
+            type="device_rolling_pre_generated",
+            data=device.to_json(),
+        )
+
+        return self.async_create_entry(
+            title=f"Device (Rolling, pre-generated): {device.name}",
             data=data,
         )
 
 
-def _get_device_from_file(hass: HomeAssistant, file_id: str) -> FindMyAccessory | None:
+def _get_derived_key_device_from_file(hass: HomeAssistant, file_id: str) -> FindMyAccessory | None:
     """Load a FindMyAccessory from an uploaded file."""
     with process_uploaded_file(hass, file_id) as f:
         device = None
@@ -494,5 +558,19 @@ def _get_device_from_file(hass: HomeAssistant, file_id: str) -> FindMyAccessory 
         if device is None:
             with contextlib.suppress(ValueError):
                 device = FindMyAccessory.from_json(f)
+
+    return device
+
+
+def _get_pre_generated_key_device_from_file(
+    hass: HomeAssistant,
+    file_id: str,
+) -> FixedRollingKeyPairAccessory | None:
+    """Load a FixedRollingKeyPairAccessory from an uploaded file."""
+    with process_uploaded_file(hass, file_id) as f:
+        device = None
+
+        with contextlib.suppress(ValueError):
+            device = FixedRollingKeyPairAccessory.from_json(f)
 
     return device

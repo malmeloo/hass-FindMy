@@ -13,7 +13,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from findmy import FindMyAccessory, KeyPair
+from findmy import FindMyAccessory, FixedRollingKeyPairAccessory, KeyPair
 
 from .config_flow import DeviceEntryData
 from .const import DOMAIN
@@ -94,7 +94,7 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
         if isinstance(self._device, KeyPair):
             return self._device.hashed_adv_key_b64
 
-        assert isinstance(self._device, FindMyAccessory)
+        assert isinstance(self._device, (FindMyAccessory, FixedRollingKeyPairAccessory))
 
         identifier = self._device.identifier
         if identifier is None:
@@ -177,9 +177,14 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
                 "type": "device_static",
                 "data": self._device.to_json(),
             }
-        elif isinstance(self._device, FindMyAccessory):  # pyright: ignore[reportUnnecessaryIsInstance]
+        elif isinstance(self._device, FindMyAccessory):
             data = {
-                "type": "device_rolling",
+                "type": "device_rolling_derived",
+                "data": self._device.to_json(),
+            }
+        elif isinstance(self._device, FixedRollingKeyPairAccessory):  # pyright: ignore[reportUnnecessaryIsInstance]
+            data = {
+                "type": "device_rolling_pre_generated",
                 "data": self._device.to_json(),
             }
         else:
