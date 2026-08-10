@@ -425,7 +425,9 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         anisette_url = info.get("advanced_options", {}).get("anisette_url") or None
-        _LOGGER.info("Re-authenticating %s (anisette: %s)", info["email"], anisette_url or "<integrated>")
+        _LOGGER.info(
+            "Re-authenticating %s (anisette: %s)", info["email"], anisette_url or "<integrated>"
+        )
 
         if anisette_url is None:
             anisette = LocalAnisetteProvider()
