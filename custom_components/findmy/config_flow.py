@@ -160,6 +160,9 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._error: Exception | None = None
         self._2fa_methods: list[AsyncSecondFactorMethod] = []
 
+        # Set while re-authenticating an existing entry (see async_step_reauth).
+        self._reauth_entry: config_entries.ConfigEntry | None = None
+
     @override
     async def async_step_user(
         self,
@@ -365,10 +368,92 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             account_data=self._account.to_json(),
         )
 
+        if self._reauth_entry is not None:
+            # Re-authentication: refresh the stored session on the existing
+            # entry rather than creating a duplicate account entry.
+            return self.async_update_reload_and_abort(
+                self._reauth_entry,
+                data=data,
+            )
+
         return self.async_create_entry(
             title=f"Account: {self._account.account_name}",
             data=data,
         )
+
+    ###########################
+    ### Re-authentication   ###
+    ###########################
+
+    async def async_step_reauth(
+        self,
+        entry_data: dict[str, Any],
+    ) -> config_entries.ConfigFlowResult:
+        """Start re-authentication for an account whose session expired."""
+        _LOGGER.debug("%s Step: reauth", self.__class__.__name__)
+
+        entry_id = self.context.get("entry_id")
+        if entry_id is not None:
+            self._reauth_entry = self.hass.config_entries.async_get_entry(entry_id)
+
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self,
+        info: LoginFlowInput | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Log the account in again, then reuse the normal 2FA steps."""
+        _LOGGER.debug(
+            "%s Step: reauth_confirm - %s",
+            self.__class__.__name__,
+            {**(info or {}), "password": "**REDACTED**"},
+        )
+
+        entry = self._reauth_entry
+        # The unique_id is the account email, so the address can be pre-filled
+        # and the user only has to supply the password and 2FA code.
+        suggested = {"email": (entry.unique_id or "") if entry else ""}
+
+        if info is None:
+            return self.async_show_form(
+                step_id="reauth_confirm",
+                data_schema=self.add_suggested_values_to_schema(
+                    DATA_SCHEMA_ACC_LOGIN,
+                    suggested,
+                ),
+                description_placeholders={"account": suggested["email"]},
+            )
+
+        anisette_url = info.get("advanced_options", {}).get("anisette_url") or None
+        _LOGGER.info("Re-authenticating %s (anisette: %s)", info["email"], anisette_url or "<integrated>")
+
+        if anisette_url is None:
+            anisette = LocalAnisetteProvider()
+        else:
+            anisette = RemoteAnisetteProvider(anisette_url)
+        self._account = AsyncAppleAccount(anisette=anisette)
+
+        try:
+            await self._account.login(info["email"], info["password"])
+        except InvalidCredentialsError:
+            return self.async_show_form(
+                step_id="reauth_confirm",
+                data_schema=self.add_suggested_values_to_schema(
+                    DATA_SCHEMA_ACC_LOGIN,
+                    suggested,
+                ),
+                errors={"base": "invalid_auth"},
+                description_placeholders={"account": suggested["email"]},
+            )
+        except UnhandledProtocolError:
+            _LOGGER.exception("Unhandled protocol exception during re-authentication")
+            return self.async_abort(reason="protocol_error")
+
+        _LOGGER.debug("State after re-login: %s", self._account.login_state)
+
+        if self._account.login_state == LoginState.REQUIRE_2FA:
+            return await self.async_step_acc_2fa_prompt()
+        return await self.async_step_acc_done()
 
     #########################
     ### Device Setup Flow ###
