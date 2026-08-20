@@ -115,17 +115,20 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
             return
 
         self._local_active = True
-        self.async_on_remove(
-            bluetooth.async_register_callback(
-                self.hass,
-                self._async_track_service_info,
-                bluetooth.BluetoothCallbackMatcher(
-                    connectable=False,
-                    manufacturer_id=APPLE_COMPANY_ID,
+        # Nearby/separated advertisements and Bluetooth proxies do not always
+        # classify the AirTag's connectability consistently, so listen for both.
+        for connectable in (False, True):
+            self.async_on_remove(
+                bluetooth.async_register_callback(
+                    self.hass,
+                    self._async_track_service_info,
+                    bluetooth.BluetoothCallbackMatcher(
+                        connectable=connectable,
+                        manufacturer_id=APPLE_COMPANY_ID,
+                    ),
+                    bluetooth.BluetoothScanningMode.PASSIVE,
                 ),
-                bluetooth.BluetoothScanningMode.PASSIVE,
-            ),
-        )
+            )
         self.async_on_remove(
             async_track_time_interval(
                 self.hass,
