@@ -122,6 +122,13 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
         return self._last_location.longitude
 
     @property
+    @override
+    def location_accuracy(self) -> float:  # pyright: ignore[reportIncompatibleVariableOverride]
+        if self._last_location is None:
+            return 0.0
+        return float(self._last_location.horizontal_accuracy)
+
+    @property
     def detected_at(self) -> datetime | None:
         if self._last_location is None:
             return None
