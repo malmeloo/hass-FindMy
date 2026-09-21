@@ -16,3 +16,21 @@ By default, the integration will only use your account to fetch for updates once
 reduce the risk of being banned by Apple. If you want to increase the tracker update frequency, it is possible
 to add additional accounts. These accounts will divide the available time; 2 accounts will generate updates every
 7.5 minutes, 3 will update every 5 minutes, etc.
+
+## Local Bluetooth tracking
+
+Rolling-key accessories such as official AirTags can also be detected by Home Assistant Bluetooth adapters and
+ESPHome Bluetooth proxies. Local detections update independently of the 15-minute Find My network polling interval.
+
+The device tracker exposes the confirmed current address in `mac_address` and adds these attributes:
+
+- `local_detected_at`
+- `local_rssi`
+- `local_source`
+- `local_state` (`nearby` or `separated`)
+- `local_battery` (`Full`, `Medium`, `Low`, or `Very Low`)
+- `local_key_candidates`
+
+All key matching happens inside Home Assistant. Local presence tracking therefore continues without an internet
+connection after the rolling-key accessory has been imported, although remote Find My network locations still
+require an Apple account and internet access.
