@@ -1,0 +1,87 @@
+blueprint:
+  name: FindMy tag - zone enter/leave notification
+  description: >-
+    Fires a notification when a FindMy tag enters or leaves a zone.
+    Works with any device_tracker entity, but pre-selects those provided
+    by the FindMy integration.
+  domain: automation
+  source_url: https://github.com/malmeloo/hass-FindMy/blob/main/blueprints/automation/tag_zone_change.yaml
+
+  input:
+    tag_entity:
+      name: FindMy tag
+      description: The device_tracker to watch
+      selector:
+        entity:
+          filter:
+            - integration: findmy
+              domain: device_tracker
+    zone_entity:
+      name: Zone
+      description: Which zone to watch
+      selector:
+        entity:
+          filter:
+            - domain: zone
+    on_enter:
+      name: Trigger on ENTER
+      description: Notify when the tag enters the zone
+      default: true
+      selector:
+        boolean: {}
+    on_leave:
+      name: Trigger on LEAVE
+      description: Notify when the tag leaves the zone
+      default: true
+      selector:
+        boolean: {}
+    notify_service:
+      name: Notification target
+      description: >-
+        Full service name including domain, e.g. `notify.mobile_app_myphone`
+        or `notify.telegram`. Leave empty to only fire a persistent-notification.
+      default: ""
+      selector:
+        text: {}
+
+variables:
+  notify_service_var: !input notify_service
+  on_enter_var: !input on_enter
+  on_leave_var: !input on_leave
+
+trigger:
+  - platform: zone
+    entity_id: !input tag_entity
+    zone: !input zone_entity
+    event: enter
+    id: entered
+  - platform: zone
+    entity_id: !input tag_entity
+    zone: !input zone_entity
+    event: leave
+    id: left
+
+condition:
+  - condition: template
+    value_template: >-
+      {{ (trigger.id == 'entered' and on_enter_var)
+         or (trigger.id == 'left' and on_leave_var) }}
+
+action:
+  - variables:
+      tag_name: "{{ state_attr(trigger.entity_id, 'friendly_name') or trigger.entity_id }}"
+      zone_name: "{{ state_attr(trigger.zone.entity_id, 'friendly_name') or trigger.zone.entity_id }}"
+      verb: "{{ 'entered' if trigger.id == 'entered' else 'left' }}"
+      message: "{{ tag_name }} has {{ verb }} zone {{ zone_name }}"
+  - choose:
+      - conditions: "{{ notify_service_var | length > 0 }}"
+        sequence:
+          - service: "{{ notify_service_var }}"
+            data:
+              title: FindMy
+              message: "{{ message }}"
+    default:
+      - service: persistent_notification.create
+        data:
+          title: FindMy
+          message: "{{ message }}"
