@@ -6,14 +6,12 @@ import logging
 from typing import TYPE_CHECKING, cast
 
 import voluptuous as vol
-from homeassistant.core import ServiceCall
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
 
 if TYPE_CHECKING:
-    from homeassistant.core import HomeAssistant
+    from homeassistant.core import HomeAssistant, ServiceCall
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,13 +47,12 @@ async def _async_delete_devices(call: ServiceCall) -> None:
         if not isinstance(entry_type, str) or not entry_type.startswith("device_"):
             continue
 
-        if filter_type != "all":
-            if entry_type != f"device_{filter_type}":
-                continue
+        if filter_type != "all" and entry_type != f"device_{filter_type}":
+            continue
 
         _LOGGER.info("delete_devices: removing entry %s (%s)", entry.title, entry.entry_id)
         removed.append(entry.entry_id)
-        await hass.config_entries.async_remove(entry.entry_id)
+        _ = await hass.config_entries.async_remove(entry.entry_id)
 
     _LOGGER.info(
         "delete_devices: removed %d entries (filter=%s)",
@@ -66,9 +63,8 @@ async def _async_delete_devices(call: ServiceCall) -> None:
     # Surface something visible in the service call response so the user can
     # see how many entries were affected.
     if not removed:
-        raise HomeAssistantError(
-            f"No matching device entries to delete (filter={filter_type})",
-        )
+        msg = f"No matching device entries to delete (filter={filter_type})"
+        raise HomeAssistantError(msg)
 
 
 def async_register(hass: HomeAssistant) -> None:

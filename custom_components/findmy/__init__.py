@@ -1,16 +1,20 @@
 """A custom integration for Home Assistant to track your Find My-enabled devices."""
 
 import logging
+from typing import TYPE_CHECKING
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
 
-from .config_flow import EntryData
 from .const import CONFIG_FLOW_VERSION_MAJOR, CONFIG_FLOW_VERSION_MINOR
 from .coordinator import FindMyDevice
 from .services import async_register as _async_register_services
 from .storage import RuntimeStorage
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
+
+    from .config_flow import EntryData
 
 _LOGGER = logging.getLogger(__name__)
 

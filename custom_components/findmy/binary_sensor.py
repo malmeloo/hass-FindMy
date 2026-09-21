@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, final, override
+from functools import cached_property
+from typing import TYPE_CHECKING, override
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -11,14 +12,8 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.core import callback
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from ._entity import (
-    battery_bits,
-    build_device_info,
-    device_unique_id,
-    latest_report,
-)
+from ._entity import battery_bits, build_device_info, device_unique_id, latest_report
 from .coordinator import FindMyCoordinator, FindMyDevice
 from .storage import RuntimeStorage
 
@@ -51,15 +46,13 @@ async def async_setup_entry(
     return True
 
 
-@final
-class FindMyBatteryLowBinarySensor(  # pyright: ignore[reportUninitializedInstanceVariable]
-    CoordinatorEntity[FindMyCoordinator],
+class FindMyBatteryLowBinarySensor(
     BinarySensorEntity,
 ):
-    _attr_has_entity_name = True
-    _attr_should_poll = False
-    _attr_name = "Battery low"
-    _attr_device_class = BinarySensorDeviceClass.BATTERY
+    _attr_has_entity_name: bool = True
+    _attr_should_poll: bool = False
+    _attr_name: str | None = "Battery low"
+    _attr_device_class: BinarySensorDeviceClass | None = BinarySensorDeviceClass.BATTERY
 
     def __init__(
         self,
@@ -67,25 +60,39 @@ class FindMyBatteryLowBinarySensor(  # pyright: ignore[reportUninitializedInstan
         device: FindMyDevice,
         entry_id: str,
     ) -> None:
-        super().__init__(coordinator, context=device)
+        super().__init__()
         self._coordinator: FindMyCoordinator = coordinator
         self._device: FindMyDevice = device
         self._entry_id: str = entry_id
         self._cached: bool | None = None
+        self._attr_available: bool = coordinator.last_update_success
 
-    @property
     @override
-    def unique_id(self) -> str:  # pyright: ignore[reportIncompatibleVariableOverride]
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            self._coordinator.async_add_listener(
+                self._handle_coordinator_update,
+                self._device,
+            )
+        )
+
+    async def async_update(self) -> None:
+        await self._coordinator.async_request_refresh()
+
+    @cached_property
+    @override
+    def unique_id(self) -> str:
         return f"{device_unique_id(self._device)}_battery_low"
 
-    @property
+    @cached_property
     @override
-    def device_info(self) -> DeviceInfo:  # pyright: ignore[reportIncompatibleVariableOverride]
+    def device_info(self) -> DeviceInfo:
         return build_device_info(self._device)
 
     @callback
-    @override
     def _handle_coordinator_update(self) -> None:
+        self._attr_available = self._coordinator.last_update_success
         self._cached = self._compute()
         self.async_write_ha_state()
 
@@ -95,11 +102,11 @@ class FindMyBatteryLowBinarySensor(  # pyright: ignore[reportUninitializedInstan
         if bits is None:
             return None
         # low = 0b10, critical = 0b11 => bit 1 set
-        return bits >= 0b10
+        return bits >= 0b10  # noqa: PLR2004
 
-    @property
+    @cached_property
     @override
-    def is_on(self) -> bool | None:  # pyright: ignore[reportIncompatibleVariableOverride]
+    def is_on(self) -> bool | None:
         val = self._cached
         if val is None:
             val = self._compute()

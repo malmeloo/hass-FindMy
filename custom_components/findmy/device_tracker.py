@@ -8,7 +8,9 @@ from time import monotonic
 from typing import TYPE_CHECKING, final, override
 
 from homeassistant.components import bluetooth
-from homeassistant.components.device_tracker.config_entry import TrackerEntity
+from homeassistant.components.device_tracker import (
+    TrackerEntity,  # pyright: ignore[reportPrivateImportUsage]
+)
 from homeassistant.components.device_tracker.const import SourceType
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
@@ -309,6 +311,7 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
         return self._last_location.status
 
     @property
+    @override
     def battery_level(self) -> int | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         """Rough battery % decoded from the status byte (0/50/70/90).
 

@@ -376,7 +376,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         _LOGGER.debug("%s Step: acc_done - %s", self.__class__.__name__, info)
 
         if self._account is None:
-            _LOGGER.exception("No account configured")
+            _LOGGER.error("No account configured")
             return self.async_abort(reason="unknown_error")
 
         data = EntryDataAccount(
@@ -403,7 +403,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth(
         self,
-        entry_data: dict[str, Any],
+        _entry_data: dict[str, Any],
     ) -> config_entries.ConfigFlowResult:
         """Start re-authentication for an account whose session expired."""
         _LOGGER.debug("%s Step: reauth", self.__class__.__name__)

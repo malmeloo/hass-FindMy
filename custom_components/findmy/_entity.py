@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from findmy import FindMyAccessory, KeyPair
 from homeassistant.helpers.device_registry import DeviceInfo
+
+from findmy import FindMyAccessory, KeyPair
 
 from .const import DOMAIN
 
@@ -49,7 +50,7 @@ def latest_report(
     coordinator: FindMyCoordinator,
     device: FindMyDevice,
 ) -> LocationReport | None:
-    if coordinator.data is None:
+    if not coordinator.data:
         return None
     return coordinator.data.get(device)
 
