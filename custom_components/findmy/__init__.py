@@ -80,7 +80,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[EntryData]) 
         await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     await storage.coordinator.reload()
-    await storage.coordinator.async_refresh()
+    # All entries share one coordinator. Awaiting a refresh here made every entry wait for a full
+    # location fetch of all devices, one entry after another, so startup took minutes with an
+    # account and a handful of tags. Request it in the background instead; the coordinator
+    # debounces these requests into a fetch or two.
+    _ = entry.async_create_background_task(
+        hass,
+        storage.coordinator.async_request_refresh(),
+        name=f"findmy refresh after setup of {entry.entry_id}",
+    )
 
     return True
 
