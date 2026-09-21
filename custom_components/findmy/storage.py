@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
     from .config_flow import EntryData
+    from .local_bluetooth import LocalObservation
 
 type StorageItem = AsyncAppleAccount | FindMyDevice
 
@@ -22,6 +23,8 @@ _LOGGER = logging.getLogger(__name__)
 class RuntimeStorage:
     def __init__(self, hass: HomeAssistant) -> None:
         self._entries: dict[str, StorageItem] = {}
+        # Latest local Bluetooth match per accessory unique id, with the scanner source.
+        self.local_observations: dict[str, tuple[LocalObservation, str | None]] = {}
 
         self._hass: HomeAssistant = hass
         self._coordinator: FindMyCoordinator = FindMyCoordinator(self._hass, self)
