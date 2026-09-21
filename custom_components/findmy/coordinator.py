@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from findmy import (
     FindMyAccessory,
     FixedRollingKeyPairAccessory,
+    InvalidStateError,
     KeyPair,
     LocationReport,
     UnauthorizedError,
@@ -85,6 +86,16 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
             device_reports = await account.fetch_location(devices)
         except UnauthorizedError as err:
             _LOGGER.exception("Unauthorized... :c")
+            raise ConfigEntryAuthFailed from err
+        except InvalidStateError as err:
+            # Apple invalidates sessions periodically; the account then sits in
+            # REQUIRE_2FA and every fetch raises InvalidStateError. Without this
+            # the entry stays "loaded", entities silently go unavailable and the
+            # user is never prompted to log in again.
+            _LOGGER.warning(
+                "Account is no longer logged in (state: %s); re-authentication required",
+                getattr(account, "login_state", "unknown"),
+            )
             raise ConfigEntryAuthFailed from err
 
         data: FindMyLocationData = (self.data or {}).copy()
