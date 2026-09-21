@@ -32,10 +32,10 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
     if config_entry.version == 1 and config_entry.data.get("type") == "device_rolling":
         new_data = {**config_entry.data}
         _LOGGER.info(
-            "Migrating entry %s from 'device_rolling' to 'device_rolling_pre_generated'",
+            "Migrating entry %s from 'device_rolling' to 'device_rolling_derived'",
             config_entry.entry_id,
         )
-        new_data["type"] = "device_rolling_pre_generated"
+        new_data["type"] = "device_rolling_derived"
 
         _ = hass.config_entries.async_update_entry(
             config_entry,
