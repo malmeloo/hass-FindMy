@@ -15,6 +15,9 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.core import callback
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+
+from findmy import FindMyAccessory
 
 from ._entity import (
     battery_label,
@@ -23,9 +26,12 @@ from ._entity import (
     build_device_info,
     device_unique_id,
     latest_report,
+    latest_status,
     status_counter,
 )
+from .const import signal_local_observation
 from .coordinator import FindMyCoordinator, FindMyDevice
+from .presence import FindMySignalStrengthSensor
 from .storage import RuntimeStorage
 
 if TYPE_CHECKING:
@@ -50,6 +56,9 @@ async def async_setup_entry(
         raise ConfigEntryNotReady(msg)
 
     storage = RuntimeStorage.get(hass)
+    if isinstance(item, FindMyAccessory):
+        # Only accessories with derived rolling keys are matched against local advertisements.
+        async_add_entities((FindMySignalStrengthSensor(item),))
     async_add_entities(
         (
             FindMyLatitudeSensor(storage.coordinator, item, entry.entry_id),
@@ -94,6 +103,21 @@ class _FindMyBaseSensor[T](
                 self._device,
             )
         )
+        # The status byte also arrives in local advertisements, without any location report.
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                signal_local_observation(device_unique_id(self._device)),
+                self._handle_local_observation,
+            ),
+        )
+
+    @callback
+    def _handle_local_observation(self, *_args: object) -> None:
+        value = self._compute_value()
+        if value != self._cached_value:
+            self._cached_value = value
+            self.async_write_ha_state()
 
     async def async_update(self) -> None:
         await self._coordinator.async_request_refresh()
@@ -197,8 +221,7 @@ class FindMyBatteryLevelSensor(_FindMyBaseSensor[str]):
 
     @override
     def _compute_value(self) -> str | None:
-        report = latest_report(self._coordinator, self._device)
-        return battery_label(report.status if report else None)
+        return battery_label(latest_status(self.hass, self._coordinator, self._device))
 
     @property
     @override
@@ -218,8 +241,7 @@ class FindMyBatteryPercentSensor(_FindMyBaseSensor[int]):
 
     @override
     def _compute_value(self) -> int | None:
-        report = latest_report(self._coordinator, self._device)
-        return battery_percent(report.status if report else None)
+        return battery_percent(latest_status(self.hass, self._coordinator, self._device))
 
     @property
     @override
@@ -240,8 +262,7 @@ class FindMyBatteryVoltageSensor(_FindMyBaseSensor[int]):
 
     @override
     def _compute_value(self) -> int | None:
-        report = latest_report(self._coordinator, self._device)
-        return battery_voltage_mv(report.status if report else None)
+        return battery_voltage_mv(latest_status(self.hass, self._coordinator, self._device))
 
     @property
     @override
@@ -260,8 +281,7 @@ class FindMyStatusCounterSensor(_FindMyBaseSensor[int]):
 
     @override
     def _compute_value(self) -> int | None:
-        report = latest_report(self._coordinator, self._device)
-        return status_counter(report.status if report else None)
+        return status_counter(latest_status(self.hass, self._coordinator, self._device))
 
     @property
     @override

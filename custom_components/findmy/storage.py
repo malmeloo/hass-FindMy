@@ -9,6 +9,8 @@ from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
@@ -25,6 +27,11 @@ class RuntimeStorage:
         self._entries: dict[str, StorageItem] = {}
         # Latest local Bluetooth match per accessory unique id, with the scanner source.
         self.local_observations: dict[str, tuple[LocalObservation, str | None]] = {}
+        # Latest Offline Finding status byte heard locally per accessory, with its time.
+        # DULT advertisements carry no status byte and never end up here.
+        self.local_status: dict[str, tuple[int, datetime]] = {}
+        # Signal strength of accessories that are currently heard locally.
+        self.local_rssi: dict[str, int | None] = {}
 
         self._hass: HomeAssistant = hass
         self._coordinator: FindMyCoordinator = FindMyCoordinator(self._hass, self)

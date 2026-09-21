@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Literal, TypedDict, cast, final, override
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components.file_upload import process_uploaded_file
-from homeassistant.data_entry_flow import section
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers.selector import (
     FileSelector,  # pyright: ignore[reportUnknownVariableType]
     FileSelectorConfig,

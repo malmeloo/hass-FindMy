@@ -24,6 +24,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from findmy import FindMyAccessory, FixedRollingKeyPairAccessory, KeyPair
 
 from ._entity import battery_percent as _battery_percent
+from ._entity import latest_status as _latest_status
 from .config_flow import DeviceEntryData
 from .const import DOMAIN, signal_local_observation
 from .coordinator import FindMyCoordinator, FindMyDevice
@@ -284,6 +285,9 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
 
         storage = RuntimeStorage.get(self.hass)
         storage.local_observations[self.unique_id] = (observation, service_info.source)
+        if observation.battery_level is not None:
+            # Offline Finding advertisement: its status byte holds the battery level.
+            storage.local_status[self.unique_id] = (observation.status, observation.detected_at)
         async_dispatcher_send(
             self.hass,
             signal_local_observation(self.unique_id),
@@ -300,7 +304,10 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
             self._device.update_alignment(observation.detected_at, observation.key_index)
             self._last_alignment_update = now_mono
 
-        if observation.can_align and now_mono - self._last_alignment_save >= _LOCAL_ALIGNMENT_SAVE_DELAY:
+        if (
+            observation.can_align
+            and now_mono - self._last_alignment_save >= _LOCAL_ALIGNMENT_SAVE_DELAY
+        ):
             self._update_entry()
             self._last_alignment_save = now_mono
 
@@ -387,7 +394,7 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
         Drives the battery icon on HA's map card.  Companion sensor entities
         (from the sensor platform) surface the same value plus a text label
         and an opt-in mV estimate."""
-        return _battery_percent(self.status)
+        return _battery_percent(_latest_status(self.hass, self._coordinator, self._device))
 
     @property
     def mac_address(self) -> str | None:

@@ -1,6 +1,6 @@
-"""Presence of rolling-key accessories based on local Bluetooth advertisements.
+"""Presence and signal strength of rolling-key accessories heard over local Bluetooth.
 
-The entity is added by the binary_sensor platform.
+The entities are added by the binary_sensor and sensor platforms.
 """
 
 from __future__ import annotations
@@ -14,23 +14,29 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.const import STATE_ON
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
+from homeassistant.const import SIGNAL_STRENGTH_DECIBELS_MILLIWATT, STATE_ON, EntityCategory
 from homeassistant.core import callback
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.restore_state import RestoreEntity
-
-from findmy import FindMyAccessory
 
 from ._entity import build_device_info, device_unique_id
 from .const import (
     CONF_AWAY_TIMEOUT,
     DEFAULT_AWAY_TIMEOUT_MINUTES,
     signal_local_observation,
+    signal_local_rssi,
 )
 from .storage import RuntimeStorage
 
 if TYPE_CHECKING:
+    from findmy import FindMyAccessory
+
     from .local_bluetooth import LocalObservation
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,6 +45,9 @@ _LOGGER = logging.getLogger(__name__)
 _REFRESH_INTERVAL = timedelta(seconds=30)
 # Attribute-only updates are rate-limited so that recorder is not written every refresh.
 _ATTRIBUTE_UPDATE_DELAY = timedelta(minutes=5)
+# The signal strength sensor follows changes of at least this many dB right away and smaller
+# ones with the attribute updates, so that the recorder is not written every refresh.
+_RSSI_UPDATE_THRESHOLD = 3
 _MAX_RECORDED_GAP = timedelta(hours=2)
 
 
@@ -171,7 +180,16 @@ class FindMyPresenceBinarySensor(BinarySensorEntity, RestoreEntity):
         state_changed = is_on != self._attr_is_on
         self._attr_is_on = is_on
 
-        attributes_due = self._last_write is None or now - self._last_write >= _ATTRIBUTE_UPDATE_DELAY
+        # An accessory that is away has no signal strength.
+        storage = RuntimeStorage.get(self.hass)
+        rssi = self._rssi if is_on else None
+        if storage.local_rssi.get(self._identifier) != rssi:
+            storage.local_rssi[self._identifier] = rssi
+            async_dispatcher_send(self.hass, signal_local_rssi(self._identifier))
+
+        attributes_due = (
+            self._last_write is None or now - self._last_write >= _ATTRIBUTE_UPDATE_DELAY
+        )
         if state_changed or force_write or attributes_due:
             self._last_write = now
             self.async_write_ha_state()
@@ -189,3 +207,50 @@ class FindMyPresenceBinarySensor(BinarySensorEntity, RestoreEntity):
             "max_gap": round(self._max_gap),
             "away_timeout": int(self._away_timeout.total_seconds() // 60),
         }
+
+
+@final
+class FindMySignalStrengthSensor(SensorEntity):
+    """Signal strength of the accessory's last local advertisement, fed by the presence sensor."""
+
+    _attr_has_entity_name = True
+    _attr_name = "Signal strength"
+    _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
+    _attr_native_unit_of_measurement = SIGNAL_STRENGTH_DECIBELS_MILLIWATT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_should_poll = False
+
+    def __init__(self, device: FindMyAccessory) -> None:
+        self._identifier: str = device_unique_id(device)
+        self._attr_unique_id = f"{self._identifier}_signal_strength"
+        self._attr_device_info = build_device_info(device)
+        self._attr_native_value = None
+        self._last_write: datetime | None = None
+
+    @override
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._attr_native_value = RuntimeStorage.get(self.hass).local_rssi.get(self._identifier)
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                signal_local_rssi(self._identifier),
+                self._handle_rssi,
+            ),
+        )
+
+    @callback
+    def _handle_rssi(self) -> None:
+        rssi = RuntimeStorage.get(self.hass).local_rssi.get(self._identifier)
+        previous = self._attr_native_value
+        now = datetime.now(tz=UTC)
+        due = self._last_write is None or now - self._last_write >= _ATTRIBUTE_UPDATE_DELAY
+        changed = (
+            rssi is None or previous is None or abs(rssi - int(previous)) >= _RSSI_UPDATE_THRESHOLD  # pyright: ignore[reportArgumentType]
+        )
+        if rssi == previous or not (changed or due):
+            return
+        self._attr_native_value = rssi
+        self._last_write = now
+        self.async_write_ha_state()
