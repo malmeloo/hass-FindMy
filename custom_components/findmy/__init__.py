@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from .config_flow import EntryData
 from .const import CONFIG_FLOW_VERSION_MAJOR, CONFIG_FLOW_VERSION_MINOR
 from .coordinator import FindMyDevice
+from .services import async_register as _async_register_services
 from .storage import RuntimeStorage
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 
 async def async_setup(hass: HomeAssistant, _config: ConfigEntry) -> bool:
     _ = RuntimeStorage.attach(hass)
+    _async_register_services(hass)
 
     return True
 
