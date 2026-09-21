@@ -192,6 +192,25 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
             )
             self.async_write_ha_state()
 
+            # Advertisements replayed on callback registration arrived before candidates
+            # existed, and unchanged payloads are not delivered again until the key rotates.
+            # Match what the Bluetooth history already holds instead of waiting for that.
+            history = sorted(
+                (
+                    service_info
+                    for service_info in bluetooth.async_discovered_service_info(
+                        self.hass,
+                        connectable=False,
+                    )
+                    if APPLE_COMPANY_ID in service_info.manufacturer_data
+                ),
+                key=lambda service_info: service_info.time,
+            )
+            for service_info in history:
+                self._async_track_service_info(
+                    service_info, bluetooth.BluetoothChange.ADVERTISEMENT
+                )
+
     @callback
     def _async_track_service_info(
         self,
@@ -206,10 +225,11 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
         if apple_data is None or not self._local_candidates:
             return
 
+        age = max(0.0, bluetooth.MONOTONIC_TIME() - service_info.time)
         observation = match_local_advertisement(
             service_info.address,
             apple_data,
-            datetime.now(tz=UTC),
+            datetime.now(tz=UTC) - timedelta(seconds=age),
             service_info.rssi,
             self._local_candidates,
         )
@@ -217,6 +237,9 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
             return
 
         previous = self._local_observation
+        if previous is not None and observation.detected_at < previous.detected_at:
+            # Bluetooth history can still hold the address from before the last key rotation.
+            return
         self._local_observation = observation
         self._local_source = service_info.source
 
