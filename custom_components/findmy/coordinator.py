@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from findmy import (
     FindMyAccessory,
+    FixedRollingKeyPairAccessory,
     InvalidStateError,
     KeyPair,
     LocationReport,
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-FindMyDevice = KeyPair | FindMyAccessory
+FindMyDevice = KeyPair | FindMyAccessory | FixedRollingKeyPairAccessory
 type FindMyLocationData = dict[FindMyDevice, LocationReport | None]
 
 
