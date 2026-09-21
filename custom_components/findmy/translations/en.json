@@ -56,6 +56,22 @@
           "name": "Name",
           "file": "Device keys"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Apple Account",
+        "description": "The session for {account} has expired and Apple requires signing in again. Your saved devices are kept.",
+        "data": {
+          "email": "E-mail address",
+          "password": "Password"
+        },
+        "sections": {
+          "advanced_options": {
+            "name": "Advanced options",
+            "data": {
+              "anisette_url": "Remote Anisette URL (optional)"
+            }
+          }
+        }
       }
     },
     "error": {
@@ -67,7 +83,8 @@
     },
     "abort": {
       "protocol_error": "A protocol exception occurred. Please report this error and try again later.",
-      "unknown_error": "An unexpected error occurred. Please try again later."
+      "unknown_error": "An unexpected error occurred. Please try again later.",
+      "reauth_successful": "Re-authentication was successful"
     }
   },
   "selector": {
