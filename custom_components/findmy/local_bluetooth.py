@@ -28,7 +28,9 @@ DULT_NETWORK_ID_APPLE = 0x01
 # Network ID and the byte holding the near-owner bit.
 _DULT_MIN_PAYLOAD_LEN = 2
 _MAC_ADDRESS_LEN = 6
-KEY_WINDOW = timedelta(hours=12)
+# A separated accessory keeps one key for a day, so look back further than ahead.
+KEY_WINDOW_PAST = timedelta(hours=36)
+KEY_WINDOW_FUTURE = timedelta(hours=12)
 
 
 def _lookup_prefix(key_prefix: bytes) -> bytes:
@@ -70,8 +72,8 @@ def build_candidate_key_lookup(
     candidates: defaultdict[bytes, list[CandidateKey]] = defaultdict(list)
 
     for index, key in accessory.keys_between(
-        observed_at - KEY_WINDOW,
-        observed_at + KEY_WINDOW,
+        observed_at - KEY_WINDOW_PAST,
+        observed_at + KEY_WINDOW_FUTURE,
     ):
         adv_key = key.adv_key_bytes
         candidates[_lookup_prefix(adv_key)].append(
