@@ -11,10 +11,14 @@ from typing import TYPE_CHECKING, Literal, TypedDict, cast, final, override
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components.file_upload import process_uploaded_file
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers.selector import (
     FileSelector,  # pyright: ignore[reportUnknownVariableType]
     FileSelectorConfig,
+    NumberSelector,  # pyright: ignore[reportUnknownVariableType]
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectOptionDict,
     SelectSelector,  # pyright: ignore[reportUnknownVariableType]
     SelectSelectorConfig,
@@ -40,7 +44,13 @@ from findmy import (
     UnhandledProtocolError,
 )
 
-from .const import CONFIG_FLOW_VERSION_MAJOR, CONFIG_FLOW_VERSION_MINOR, DOMAIN
+from .const import (
+    CONF_AWAY_TIMEOUT,
+    CONFIG_FLOW_VERSION_MAJOR,
+    CONFIG_FLOW_VERSION_MINOR,
+    DEFAULT_AWAY_TIMEOUT_MINUTES,
+    DOMAIN,
+)
 
 if TYPE_CHECKING:
     from typing import Any
@@ -165,6 +175,23 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for initial setup."""
 
     VERSION, MINOR_VERSION = CONFIG_FLOW_VERSION_MAJOR, CONFIG_FLOW_VERSION_MINOR
+
+    @staticmethod
+    @callback
+    @override
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Options for rolling-key accessories."""
+        return RollingDeviceOptionsFlow()
+
+    @classmethod
+    @callback
+    @override
+    def async_supports_options_flow(cls, config_entry: config_entries.ConfigEntry) -> bool:
+        """Only accessories that are matched locally have presence options."""
+        entry_type: object = config_entry.data.get("type")
+        return entry_type == "device_rolling_derived"
 
     def __init__(self, *args, **kwargs) -> None:  # pyright: ignore[reportMissingParameterType]
         """Initialize."""
@@ -661,3 +688,40 @@ def _get_pre_generated_key_device_from_file(
             device = FixedRollingKeyPairAccessory.from_json(f)
 
     return device
+
+
+DATA_SCHEMA_ROLLING_OPTIONS = vol.Schema(
+    {
+        vol.Required(CONF_AWAY_TIMEOUT, default=DEFAULT_AWAY_TIMEOUT_MINUTES): NumberSelector(
+            NumberSelectorConfig(
+                min=1,
+                max=240,
+                step=1,
+                unit_of_measurement="min",
+                mode=NumberSelectorMode.BOX,
+            ),
+        ),
+    },
+)
+
+
+@final
+class RollingDeviceOptionsFlow(config_entries.OptionsFlow):
+    """Local presence options of a rolling-key accessory."""
+
+    async def async_step_init(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(
+                data={CONF_AWAY_TIMEOUT: int(cast("float", user_input[CONF_AWAY_TIMEOUT]))},
+            )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                DATA_SCHEMA_ROLLING_OPTIONS,
+                self.config_entry.options,
+            ),
+        )

@@ -16,6 +16,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -23,8 +24,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from findmy import FindMyAccessory, FixedRollingKeyPairAccessory, KeyPair
 
 from ._entity import battery_percent as _battery_percent
+from ._entity import latest_status as _latest_status
 from .config_flow import DeviceEntryData
-from .const import DOMAIN
+from .const import DOMAIN, signal_local_observation
 from .coordinator import FindMyCoordinator, FindMyDevice
 from .local_bluetooth import (
     APPLE_COMPANY_ID,
@@ -53,7 +55,9 @@ _LOGGER = logging.getLogger(__name__)
 _LOCAL_KEY_REFRESH_INTERVAL = timedelta(minutes=15)
 _LOCAL_STATE_UPDATE_DELAY = 60
 _LOCAL_ALIGNMENT_UPDATE_DELAY = 60
-_LOCAL_ALIGNMENT_SAVE_DELAY = 15 * 60
+# The key index advances every 15 minutes; persisting it on every rollover rewrites
+# core.config_entries for each accessory, so the saved alignment only trails by up to an hour.
+_LOCAL_ALIGNMENT_SAVE_DELAY = 60 * 60
 
 
 async def async_setup_entry(
@@ -279,6 +283,18 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
         self._local_observation = observation
         self._local_source = service_info.source
 
+        storage = RuntimeStorage.get(self.hass)
+        storage.local_observations[self.unique_id] = (observation, service_info.source)
+        if observation.battery_level is not None:
+            # Offline Finding advertisement: its status byte holds the battery level.
+            storage.local_status[self.unique_id] = (observation.status, observation.detected_at)
+        async_dispatcher_send(
+            self.hass,
+            signal_local_observation(self.unique_id),
+            observation,
+            service_info.source,
+        )
+
         now_mono = monotonic()
         current_index = self._device._alignment_index  # noqa: SLF001  # pyright: ignore[reportPrivateUsage]
         index_changed = observation.can_align and observation.key_index != current_index
@@ -288,8 +304,9 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
             self._device.update_alignment(observation.detected_at, observation.key_index)
             self._last_alignment_update = now_mono
 
-        if observation.can_align and (
-            index_changed or now_mono - self._last_alignment_save >= _LOCAL_ALIGNMENT_SAVE_DELAY
+        if (
+            observation.can_align
+            and now_mono - self._last_alignment_save >= _LOCAL_ALIGNMENT_SAVE_DELAY
         ):
             self._update_entry()
             self._last_alignment_save = now_mono
@@ -377,7 +394,7 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
         Drives the battery icon on HA's map card.  Companion sensor entities
         (from the sensor platform) surface the same value plus a text label
         and an opt-in mV estimate."""
-        return _battery_percent(self.status)
+        return _battery_percent(_latest_status(self.hass, self._coordinator, self._device))
 
     @property
     def mac_address(self) -> str | None:
