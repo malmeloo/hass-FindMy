@@ -16,7 +16,7 @@ from homeassistant.data_entry_flow import section
 from homeassistant.helpers.selector import (
     FileSelector,  # pyright: ignore[reportUnknownVariableType]
     FileSelectorConfig,
-    NumberSelector,
+    NumberSelector,  # pyright: ignore[reportUnknownVariableType]
     NumberSelectorConfig,
     NumberSelectorMode,
     SelectOptionDict,
@@ -178,17 +178,20 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
+    @override
     def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,  # noqa: ARG004
+        config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Options for rolling-key accessories."""
         return RollingDeviceOptionsFlow()
 
     @classmethod
     @callback
+    @override
     def async_supports_options_flow(cls, config_entry: config_entries.ConfigEntry) -> bool:
         """Only accessories that are matched locally have presence options."""
-        return config_entry.data.get("type") == "device_rolling_derived"
+        entry_type: object = config_entry.data.get("type")
+        return entry_type == "device_rolling_derived"
 
     def __init__(self, *args, **kwargs) -> None:  # pyright: ignore[reportMissingParameterType]
         """Initialize."""
@@ -712,7 +715,7 @@ class RollingDeviceOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         if user_input is not None:
             return self.async_create_entry(
-                data={CONF_AWAY_TIMEOUT: int(user_input[CONF_AWAY_TIMEOUT])},
+                data={CONF_AWAY_TIMEOUT: int(cast("float", user_input[CONF_AWAY_TIMEOUT]))},
             )
 
         return self.async_show_form(
