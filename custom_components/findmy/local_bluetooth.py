@@ -20,7 +20,20 @@ if TYPE_CHECKING:
     from findmy import FindMyAccessoryMapping
 
 APPLE_COMPANY_ID = 0x004C
+# Detecting Unwanted Location Trackers (IETF DULT) location-enabled payload. Second-generation
+# AirTags advertise it instead of the Apple Offline Finding payload while near their owner; the
+# random static MAC address then carries the first six bytes of the current rolling key.
+DULT_SERVICE_UUID = "0000fcb2-0000-1000-8000-00805f9b34fb"
+DULT_NETWORK_ID_APPLE = 0x01
+# Network ID and the byte holding the near-owner bit.
+_DULT_MIN_PAYLOAD_LEN = 2
+_MAC_ADDRESS_LEN = 6
 KEY_WINDOW = timedelta(hours=12)
+
+
+def _lookup_prefix(key_prefix: bytes) -> bytes:
+    """Mask the two most significant key bits, which a MAC address cannot carry."""
+    return bytes([key_prefix[0] & 0x3F]) + key_prefix[1:6]
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +56,7 @@ class LocalObservation:
     detected_at: datetime
     rssi: int | None
     state: str
-    battery_level: str
+    battery_level: str | None
     status: int
     key_index: int
     can_align: bool
@@ -53,7 +66,7 @@ def build_candidate_key_lookup(
     accessory: FindMyAccessory,
     observed_at: datetime,
 ) -> dict[bytes, tuple[CandidateKey, ...]]:
-    """Build a lookup keyed by the six public-key bytes visible nearby."""
+    """Build a lookup keyed by the first six public-key bytes, without the top two bits."""
     candidates: defaultdict[bytes, list[CandidateKey]] = defaultdict(list)
 
     for index, key in accessory.keys_between(
@@ -61,7 +74,7 @@ def build_candidate_key_lookup(
         observed_at + KEY_WINDOW,
     ):
         adv_key = key.adv_key_bytes
-        candidates[adv_key[:6]].append(
+        candidates[_lookup_prefix(adv_key)].append(
             CandidateKey(
                 index=index,
                 adv_key=adv_key,
@@ -133,8 +146,10 @@ def match_local_advertisement(
     else:
         return None
 
-    for candidate in candidates.get(partial_key, ()):
+    for candidate in candidates.get(_lookup_prefix(partial_key), ()):
         if full_key is not None and candidate.adv_key != full_key:
+            continue
+        if full_key is None and candidate.adv_key[:6] != partial_key:
             continue
 
         return LocalObservation(
@@ -144,6 +159,43 @@ def match_local_advertisement(
             state=state,
             battery_level=device.battery_level,
             status=device.status,
+            key_index=candidate.index,
+            can_align=candidate.can_align,
+        )
+
+    return None
+
+
+def match_dult_advertisement(
+    address: str,
+    service_data: bytes,
+    detected_at: datetime,
+    rssi: int | None,
+    candidates: CandidateKeyLookup,
+) -> LocalObservation | None:
+    """Match a DULT location-enabled payload by the key prefix carried in its MAC address.
+
+    The payload holds the network ID, the near-owner bit and proprietary data; only the address
+    identifies the accessory, and its top two bits are fixed by the random static address type.
+    """
+    if len(service_data) < _DULT_MIN_PAYLOAD_LEN or service_data[0] != DULT_NETWORK_ID_APPLE:
+        return None
+
+    try:
+        mac = bytes.fromhex(address.replace(":", ""))
+    except ValueError:
+        return None
+    if len(mac) != _MAC_ADDRESS_LEN:
+        return None
+
+    for candidate in candidates.get(_lookup_prefix(mac), ()):
+        return LocalObservation(
+            mac_address=address.upper(),
+            detected_at=detected_at,
+            rssi=rssi,
+            state="near_owner" if service_data[1] & 0x01 else "separated_dult",
+            battery_level=None,
+            status=service_data[1],
             key_index=candidate.index,
             can_align=candidate.can_align,
         )

@@ -104,9 +104,9 @@ class FindMyBatteryLowBinarySensor(
         # low = 0b10, critical = 0b11 => bit 1 set
         return bits >= 0b10  # noqa: PLR2004
 
-    @cached_property
+    @property
     @override
-    def is_on(self) -> bool | None:
+    def is_on(self) -> bool | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         val = self._cached
         if val is None:
             val = self._compute()

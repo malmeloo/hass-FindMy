@@ -28,9 +28,11 @@ from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
 from .local_bluetooth import (
     APPLE_COMPANY_ID,
+    DULT_SERVICE_UUID,
     CandidateKeyLookup,
     LocalObservation,
     build_candidate_key_lookup_from_json,
+    match_dult_advertisement,
     match_local_advertisement,
 )
 from .storage import RuntimeStorage
@@ -132,6 +134,18 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
                     bluetooth.BluetoothScanningMode.PASSIVE,
                 ),
             )
+        # Second-generation AirTags near their owner advertise only the DULT payload.
+        self.async_on_remove(
+            bluetooth.async_register_callback(
+                self.hass,
+                self._async_track_service_info,
+                bluetooth.BluetoothCallbackMatcher(
+                    connectable=False,
+                    service_data_uuid=DULT_SERVICE_UUID,
+                ),
+                bluetooth.BluetoothScanningMode.PASSIVE,
+            ),
+        )
         self.async_on_remove(
             async_track_time_interval(
                 self.hass,
@@ -192,31 +206,76 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
             )
             self.async_write_ha_state()
 
+            # Advertisements replayed on callback registration arrived before candidates
+            # existed, and unchanged payloads are not delivered again until the key rotates.
+            # Match what the Bluetooth history already holds instead of waiting for that.
+            history = sorted(
+                (
+                    service_info
+                    for service_info in bluetooth.async_discovered_service_info(
+                        self.hass,
+                        connectable=False,
+                    )
+                    if APPLE_COMPANY_ID in service_info.manufacturer_data
+                    or DULT_SERVICE_UUID in service_info.service_data
+                ),
+                key=lambda service_info: service_info.time,
+            )
+            for service_info in history:
+                self._async_track_service_info(
+                    service_info,
+                    bluetooth.BluetoothChange.ADVERTISEMENT,
+                )
+
+    def _match_service_info(
+        self,
+        service_info: bluetooth.BluetoothServiceInfoBleak,
+    ) -> LocalObservation | None:
+        """Match either advertisement format an accessory may use against the key cache."""
+        apple_data = service_info.manufacturer_data.get(APPLE_COMPANY_ID)
+        dult_data = service_info.service_data.get(DULT_SERVICE_UUID)
+        if apple_data is None and dult_data is None:
+            return None
+
+        age = max(0.0, bluetooth.MONOTONIC_TIME() - service_info.time)
+        detected_at = datetime.now(tz=UTC) - timedelta(seconds=age)
+        observation = None
+        if apple_data is not None:
+            observation = match_local_advertisement(
+                service_info.address,
+                apple_data,
+                detected_at,
+                service_info.rssi,
+                self._local_candidates,
+            )
+        if observation is None and dult_data is not None:
+            observation = match_dult_advertisement(
+                service_info.address,
+                dult_data,
+                detected_at,
+                service_info.rssi,
+                self._local_candidates,
+            )
+        return observation
+
     @callback
     def _async_track_service_info(
         self,
         service_info: bluetooth.BluetoothServiceInfoBleak,
         _change: bluetooth.BluetoothChange,
     ) -> None:
-        """Match an Apple advertisement against the pre-generated key cache."""
-        if not isinstance(self._device, FindMyAccessory):
+        """Match an Apple or DULT advertisement against the pre-generated key cache."""
+        if not isinstance(self._device, FindMyAccessory) or not self._local_candidates:
             return
 
-        apple_data = service_info.manufacturer_data.get(APPLE_COMPANY_ID)
-        if apple_data is None or not self._local_candidates:
-            return
-
-        observation = match_local_advertisement(
-            service_info.address,
-            apple_data,
-            datetime.now(tz=UTC),
-            service_info.rssi,
-            self._local_candidates,
-        )
+        observation = self._match_service_info(service_info)
         if observation is None:
             return
 
         previous = self._local_observation
+        if previous is not None and observation.detected_at < previous.detected_at:
+            # Bluetooth history can still hold the address from before the last key rotation.
+            return
         self._local_observation = observation
         self._local_source = service_info.source
 
