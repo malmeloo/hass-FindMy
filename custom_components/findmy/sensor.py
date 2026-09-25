@@ -135,9 +135,9 @@ class FindMyLatitudeSensor(_FindMyBaseSensor[float]):
         report = latest_report(self._coordinator, self._device)
         return report.latitude if report else None
 
-    @cached_property
+    @property
     @override
-    def native_value(self) -> float | None:
+    def native_value(self) -> float | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         val = self._cached_value
         if val is None:
             val = self._compute_value()
@@ -156,9 +156,9 @@ class FindMyLongitudeSensor(_FindMyBaseSensor[float]):
         report = latest_report(self._coordinator, self._device)
         return report.longitude if report else None
 
-    @cached_property
+    @property
     @override
-    def native_value(self) -> float | None:
+    def native_value(self) -> float | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         val = self._cached_value
         if val is None:
             val = self._compute_value()
@@ -180,9 +180,9 @@ class FindMyPositionSensor(_FindMyBaseSensor[str]):
             return None
         return f"{report.latitude:.6f},{report.longitude:.6f}"
 
-    @cached_property
+    @property
     @override
-    def native_value(self) -> str | None:
+    def native_value(self) -> str | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         val = self._cached_value
         if val is None:
             val = self._compute_value()
@@ -200,9 +200,9 @@ class FindMyBatteryLevelSensor(_FindMyBaseSensor[str]):
         report = latest_report(self._coordinator, self._device)
         return battery_label(report.status if report else None)
 
-    @cached_property
+    @property
     @override
-    def native_value(self) -> str | None:
+    def native_value(self) -> str | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         val = self._cached_value
         if val is None:
             val = self._compute_value()
@@ -221,9 +221,9 @@ class FindMyBatteryPercentSensor(_FindMyBaseSensor[int]):
         report = latest_report(self._coordinator, self._device)
         return battery_percent(report.status if report else None)
 
-    @cached_property
+    @property
     @override
-    def native_value(self) -> int | None:
+    def native_value(self) -> int | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         val = self._cached_value
         if val is None:
             val = self._compute_value()
@@ -243,9 +243,9 @@ class FindMyBatteryVoltageSensor(_FindMyBaseSensor[int]):
         report = latest_report(self._coordinator, self._device)
         return battery_voltage_mv(report.status if report else None)
 
-    @cached_property
+    @property
     @override
-    def native_value(self) -> int | None:
+    def native_value(self) -> int | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         val = self._cached_value
         if val is None:
             val = self._compute_value()
@@ -263,9 +263,9 @@ class FindMyStatusCounterSensor(_FindMyBaseSensor[int]):
         report = latest_report(self._coordinator, self._device)
         return status_counter(report.status if report else None)
 
-    @cached_property
+    @property
     @override
-    def native_value(self) -> int | None:
+    def native_value(self) -> int | None:  # pyright: ignore[reportIncompatibleVariableOverride]
         val = self._cached_value
         if val is None:
             val = self._compute_value()
