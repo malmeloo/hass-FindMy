@@ -25,6 +25,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.util import dt as dt_util
 
 from ._entity import build_device_info, device_unique_id
 from .const import (
@@ -55,7 +56,9 @@ _MAX_RECORDED_GAP = timedelta(hours=2)
 
 
 class FindMyPresenceBinarySensor(BinarySensorEntity, RestoreEntity):  # pyright: ignore[reportIncompatibleVariableOverride]
-    """Home while the accessory is heard by Home Assistant Bluetooth, with an away timeout.
+    """On while the accessory is heard by Home Assistant Bluetooth, with an away timeout.
+
+    Only local Bluetooth is used, unlike the device tracker, which follows location reports.
 
     Home Assistant only runs advertisement callbacks when the payload changes, which for an
     accessory happens once per key rotation (15 minutes). The callback therefore only tells
@@ -63,10 +66,8 @@ class FindMyPresenceBinarySensor(BinarySensorEntity, RestoreEntity):  # pyright:
     Bluetooth history, which is updated for every advertisement.
     """
 
-    # No entity name: like the device tracker, the sensor represents the accessory itself and is
-    # listed under the accessory's name instead of a generic "Present".
     _attr_has_entity_name: bool = True
-    _attr_name: str | None = None
+    _attr_name: str | None = "Bluetooth presence"
     _attr_device_class: BinarySensorDeviceClass | None = BinarySensorDeviceClass.PRESENCE  # pyright: ignore[reportIncompatibleVariableOverride]
     _attr_should_poll: bool = False
     _unrecorded_attributes: frozenset[str] = frozenset(
@@ -136,6 +137,10 @@ class FindMyPresenceBinarySensor(BinarySensorEntity, RestoreEntity):  # pyright:
             # Assume the accessory is still here until the away timeout passes without it.
             self._is_on = True
             self._last_seen = now
+        elif last_state is not None:
+            last_seen: object = last_state.attributes.get("last_seen")
+            if isinstance(last_seen, str):
+                self._last_seen = dt_util.parse_datetime(last_seen)
 
         stored = RuntimeStorage.get(self.hass).local_observations.get(self._identifier)
         if stored is not None:
