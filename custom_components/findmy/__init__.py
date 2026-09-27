@@ -96,10 +96,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[EntryData]) 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry[EntryData]) -> bool:
     _LOGGER.debug("Unloading FindMy entry: %s", entry.entry_id)
 
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if not unload_ok:
-        return False
+    try:
+        item = await RuntimeStorage.get(hass).del_entry(entry)
 
-    _ = await RuntimeStorage.get(hass).del_entry(entry)
+        # only device items are actually loaded, so only unload platforms for those
+        do_unload = isinstance(item, FindMyDevice)
+    except KeyError:
+        _LOGGER.warning(
+            "Entry %s not found in storage during unload; skipping platform unload",
+            entry.entry_id,
+        )
+
+        # we still want to try and unload, just in case the platforms were loaded somehow.
+        do_unload = True
+
+    if do_unload:
+        return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     return True
