@@ -1,4 +1,4 @@
-"""FindMy binary_sensor platform: battery-low flag for automations."""
+"""FindMy binary_sensor platform: battery-low flag and local presence."""
 
 from __future__ import annotations
 
@@ -12,9 +12,14 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.core import callback
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from ._entity import battery_bits, build_device_info, device_unique_id, latest_report
+from findmy import FindMyAccessory
+
+from ._entity import battery_bits, build_device_info, device_unique_id, latest_status
+from .const import signal_local_observation
 from .coordinator import FindMyCoordinator, FindMyDevice
+from .presence import FindMyPresenceBinarySensor
 from .storage import RuntimeStorage
 
 if TYPE_CHECKING:
@@ -39,9 +44,13 @@ async def async_setup_entry(
         raise ConfigEntryNotReady(msg)
 
     storage = RuntimeStorage.get(hass)
-    async_add_entities(
-        (FindMyBatteryLowBinarySensor(storage.coordinator, item, entry.entry_id),),
-    )
+    entities: list[BinarySensorEntity] = [
+        FindMyBatteryLowBinarySensor(storage.coordinator, item, entry.entry_id),
+    ]
+    if isinstance(item, FindMyAccessory):
+        # Only accessories with derived rolling keys are matched against local advertisements.
+        entities.append(FindMyPresenceBinarySensor(item, entry.entry_id))
+    async_add_entities(entities)
 
     return True
 
@@ -76,6 +85,21 @@ class FindMyBatteryLowBinarySensor(
                 self._device,
             )
         )
+        # The status byte also arrives in local advertisements, without any location report.
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                signal_local_observation(device_unique_id(self._device)),
+                self._handle_local_observation,
+            ),
+        )
+
+    @callback
+    def _handle_local_observation(self, *_args: object) -> None:
+        value = self._compute()
+        if value != self._cached:
+            self._cached = value
+            self.async_write_ha_state()
 
     async def async_update(self) -> None:
         await self._coordinator.async_request_refresh()
@@ -97,8 +121,7 @@ class FindMyBatteryLowBinarySensor(
         self.async_write_ha_state()
 
     def _compute(self) -> bool | None:
-        report = latest_report(self._coordinator, self._device)
-        bits = battery_bits(report.status if report else None)
+        bits = battery_bits(latest_status(self.hass, self._coordinator, self._device))
         if bits is None:
             return None
         # low = 0b10, critical = 0b11 => bit 1 set

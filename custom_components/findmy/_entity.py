@@ -16,6 +16,8 @@ from findmy import FindMyAccessory, KeyPair
 from .const import DOMAIN
 
 if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+
     from findmy import LocationReport
 
     from .coordinator import FindMyCoordinator, FindMyDevice
@@ -53,6 +55,23 @@ def latest_report(
     if not coordinator.data:
         return None
     return coordinator.data.get(device)
+
+
+def latest_status(
+    hass: HomeAssistant,
+    coordinator: FindMyCoordinator,
+    device: FindMyDevice,
+) -> int | None:
+    """Status byte from whichever is newer: the last location report or a local advertisement."""
+    from .storage import RuntimeStorage  # noqa: PLC0415  # circular import
+
+    report = latest_report(coordinator, device)
+    local = RuntimeStorage.get(hass).local_status.get(device_unique_id(device))
+    if local is None:
+        return report.status if report else None
+    if report is None or report.timestamp <= local[1]:
+        return local[0]
+    return report.status
 
 
 # --- Battery bits (Apple Find My payload byte 6, bits 6-7) ----------------

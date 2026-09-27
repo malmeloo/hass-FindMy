@@ -103,5 +103,16 @@
         "rolling_pre_generated": "Rolling-key tag (pre-generated)"
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Local presence",
+        "description": "The accessory is reported away when Home Assistant Bluetooth has not heard it for this long.",
+        "data": {
+          "away_timeout": "Away timeout"
+        }
+      }
+    }
   }
 }
