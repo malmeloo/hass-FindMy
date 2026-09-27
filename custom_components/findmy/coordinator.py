@@ -72,6 +72,11 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
         )
         self.update_interval = timedelta(seconds=self._MIN_ACCOUNT_UPDATE_DELAY // len(accounts))
 
+    @property
+    def devices(self) -> list[FindMyDevice]:
+        """Returns a list of all devices that have been registered with the coordinator."""
+        return list(set(self.async_contexts()))
+
     @override
     async def _async_update_data(self) -> FindMyLocationData:
         account = self.get_account()
@@ -80,7 +85,7 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
             return {}
         _LOGGER.debug("Using lookup account: %s", account)
 
-        devices: list[FindMyDevice] = list(self.async_contexts())
+        devices: list[FindMyDevice] = self.devices
         _LOGGER.debug("Fetching reports for devices: %s", devices)
         try:
             device_reports = await account.fetch_location(devices)
