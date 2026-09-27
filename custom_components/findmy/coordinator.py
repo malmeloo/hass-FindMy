@@ -19,6 +19,8 @@ from findmy import (
 )
 
 if TYPE_CHECKING:
+    from asyncio import TimerHandle
+
     from homeassistant.core import HomeAssistant
 
     from findmy.reports import AsyncAppleAccount
@@ -48,6 +50,21 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
         self._storage = storage
 
         self._cur_acc_index = 0
+        self._refresh_handle: TimerHandle | None = None
+
+    def schedule_refresh(self, delay_seconds: float = 10.0) -> None:
+        """Schedule a refresh after a quiet period."""
+        if self._refresh_handle is not None:
+            self._refresh_handle.cancel()
+
+        def _request_refresh() -> None:
+            self._refresh_handle = None
+            _ = self.hass.async_create_task(
+                self.async_request_refresh(),
+                name="findmy delayed startup refresh",
+            )
+
+        self._refresh_handle = self.hass.loop.call_later(delay_seconds, _request_refresh)
 
     def get_account(self) -> AsyncAppleAccount | None:
         accounts = self._storage.accounts
@@ -75,7 +92,7 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData]):
     @property
     def devices(self) -> list[FindMyDevice]:
         """Returns a list of all devices that have been registered with the coordinator."""
-        return list(set(self.async_contexts()))
+        return list({ctx for ctx in self.async_contexts() if isinstance(ctx, FindMyDevice)})  # pyright: ignore[reportAny]
 
     @override
     async def _async_update_data(self) -> FindMyLocationData:
