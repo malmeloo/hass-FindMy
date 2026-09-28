@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, cast
 
@@ -83,7 +84,12 @@ class RuntimeStorage:
         data = cast("EntryData", entry.data)  # pyright: ignore[reportInvalidCast]
 
         if data["type"] == "account":
-            account = AsyncAppleAccount.from_json(data["account_data"])
+            loop = asyncio.get_running_loop()
+            account = await loop.run_in_executor(
+                None,
+                AsyncAppleAccount.from_json,
+                data["account_data"],
+            )
 
             _LOGGER.debug(
                 "Storing entry %s as account: %s",
