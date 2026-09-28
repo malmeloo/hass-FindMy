@@ -5,9 +5,11 @@ attach to the same HASS "device" and remain in sync when the coordinator
 updates.
 """
 
+# pyright: reportImportCycles=false
+
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from homeassistant.helpers.device_registry import DeviceInfo
 
@@ -18,7 +20,7 @@ from .const import DOMAIN
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from findmy import LocationReport
+    from findmy import AsyncAppleAccount, LocationReport
 
     from .coordinator import FindMyCoordinator, FindMyDevice
 
@@ -39,6 +41,29 @@ def device_unique_id(device: FindMyDevice) -> str:
 
 def device_name(device: FindMyDevice) -> str:
     return device.name or "Unknown"
+
+
+def account_name(account: AsyncAppleAccount) -> str:
+    email = cast("str | None", account.account_name) or ""
+    fname = cast("str | None", account.first_name) or ""
+    lname = cast("str | None", account.last_name) or ""
+
+    return f"Apple: {fname} {lname} <{email}>".strip()
+
+
+def account_unique_id(account: AsyncAppleAccount) -> str:
+    """Stable identifier used for the device registry entry for an Apple account."""
+    email = cast("str | None", account.account_name) or ""
+
+    if not email:
+        msg = "Account has no email address to derive a unique ID from"
+        raise ValueError(msg)
+
+    return email
+
+
+def account_entity_id(account: AsyncAppleAccount) -> str:
+    return account_unique_id(account).split("@")[0]
 
 
 def build_device_info(device: FindMyDevice) -> DeviceInfo:

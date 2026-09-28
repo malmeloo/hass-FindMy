@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 from homeassistant.const import Platform
 
+from findmy import AsyncAppleAccount
+
 from .const import CONFIG_FLOW_VERSION_MAJOR, CONFIG_FLOW_VERSION_MINOR
 from .coordinator import FindMyDevice
 from .services import async_register as _async_register_services
@@ -18,7 +20,10 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [
+ACCOUNT_PLATFORMS = [
+    Platform.SENSOR,
+]
+DEVICE_PLATFORMS = [
     Platform.DEVICE_TRACKER,
     Platform.SENSOR,
     Platform.BINARY_SENSOR,
@@ -75,9 +80,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[EntryData]) 
     storage = RuntimeStorage.get(hass)
 
     item = await storage.add_entry(entry)
-    if isinstance(item, FindMyDevice):
+
+    if isinstance(item, AsyncAppleAccount):
+        await hass.config_entries.async_forward_entry_setups(entry, ACCOUNT_PLATFORMS)
+    elif isinstance(item, FindMyDevice):  # pyright: ignore[reportUnnecessaryIsInstance]
         # only initialize device tracker entities for actual devices
-        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        await hass.config_entries.async_forward_entry_setups(entry, DEVICE_PLATFORMS)
+    else:
+        _LOGGER.warning(
+            "Could not determine platforms to load for entry %s; no entities will be created",
+            entry.entry_id,
+        )
 
     await storage.coordinator.reload()
     # All entries share one coordinator. Delay the first refresh so multiple setup calls can
@@ -92,19 +105,22 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry[EntryData])
 
     try:
         item = await RuntimeStorage.get(hass).del_entry(entry)
-
-        # only device items are actually loaded, so only unload platforms for those
-        do_unload = isinstance(item, FindMyDevice)
     except KeyError:
         _LOGGER.warning(
-            "Entry %s not found in storage during unload; skipping platform unload",
+            "Entry %s not found in storage during unload",
             entry.entry_id,
         )
+        return False
 
-        # we still want to try and unload, just in case the platforms were loaded somehow.
-        do_unload = True
-
-    if do_unload:
-        return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if isinstance(item, AsyncAppleAccount):
+        _ = await hass.config_entries.async_unload_platforms(entry, ACCOUNT_PLATFORMS)
+    elif isinstance(item, FindMyDevice):  # pyright: ignore[reportUnnecessaryIsInstance]
+        _ = await hass.config_entries.async_unload_platforms(entry, DEVICE_PLATFORMS)
+    else:
+        _LOGGER.warning(
+            "Could not determine platforms to unload for entry %s",
+            entry.entry_id,
+        )
+        return False
 
     return True

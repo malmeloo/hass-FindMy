@@ -17,3 +17,8 @@ def signal_local_observation(unique_id: str) -> str:
 def signal_local_rssi(unique_id: str) -> str:
     """Dispatcher signal fired when the signal strength of a local accessory changes."""
     return f"{DOMAIN}_local_rssi_{unique_id}"
+
+
+def signal_account_fetch(account_name: str) -> str:
+    """Dispatcher signal fired when an Apple account fetch starts or ends."""
+    return f"{DOMAIN}_account_fetch_{account_name}"

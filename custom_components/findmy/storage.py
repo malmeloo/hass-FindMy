@@ -1,3 +1,5 @@
+# pyright: reportImportCycles=false
+
 from __future__ import annotations
 
 import logging
