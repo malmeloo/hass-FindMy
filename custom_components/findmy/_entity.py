@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, cast
 
 from homeassistant.helpers.device_registry import DeviceInfo
 
-from findmy import FindMyAccessory, KeyPair
+from findmy import FindMyAccessory, FixedRollingKeyPairAccessory, KeyPair
 
 from .const import DOMAIN
 
@@ -31,7 +31,7 @@ def device_unique_id(device: FindMyDevice) -> str:
     if isinstance(device, KeyPair):
         return device.hashed_adv_key_b64
 
-    assert isinstance(device, FindMyAccessory)
+    assert isinstance(device, (FindMyAccessory, FixedRollingKeyPairAccessory))
     identifier = device.identifier
     if identifier is None:
         msg = "Device has no identifier"
