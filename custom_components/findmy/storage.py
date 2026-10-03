@@ -80,6 +80,13 @@ class RuntimeStorage:
     def get_entry(self, entry: ConfigEntry[EntryData]) -> StorageItem:
         return self._entries[entry.entry_id]
 
+    def entry_id_for(self, item: StorageItem) -> str | None:
+        """Return the id of the config entry that owns ``item``, if any."""
+        for entry_id, stored in self._entries.items():
+            if stored is item:
+                return entry_id
+        return None
+
     async def add_entry(self, entry: ConfigEntry) -> StorageItem:
         data = cast("EntryData", entry.data)  # pyright: ignore[reportInvalidCast]
 

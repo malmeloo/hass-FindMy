@@ -8,9 +8,9 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, final, override
 
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.config_entries import SOURCE_REAUTH
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from findmy import (
     FindMyAccessory,
@@ -18,6 +18,7 @@ from findmy import (
     InvalidStateError,
     KeyPair,
     LocationReport,
+    LoginState,
     UnauthorizedError,
 )
 
@@ -84,6 +85,31 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
         self._logs: list[CoordinatorLogEntry] = []
         self._refresh_handle: TimerHandle | None = None
 
+    def _start_reauth(self, account: AsyncAppleAccount) -> None:
+        """Prompt for re-authentication of the config entry that owns ``account``.
+
+        All entries share this coordinator, so it is not bound to a config entry
+        and Home Assistant cannot map ``ConfigEntryAuthFailed`` to one by itself.
+        """
+        entry_id = self._storage.entry_id_for(account)
+        entry = self.hass.config_entries.async_get_entry(entry_id) if entry_id else None
+        if entry is None:
+            _LOGGER.error(
+                "Cannot map account %s to a config entry; no re-auth prompt shown",
+                account_name(account),
+            )
+            return
+
+        if any(entry.async_get_active_flows(self.hass, {SOURCE_REAUTH})):
+            return
+
+        _LOGGER.warning(
+            "Account %s needs re-authentication; requesting it for entry %s",
+            account_name(account),
+            entry.entry_id,
+        )
+        entry.async_start_reauth(self.hass)
+
     def schedule_refresh(self, delay_seconds: float = 10.0) -> None:
         """Schedule a refresh after a quiet period."""
         if self._refresh_handle is not None:
@@ -99,14 +125,28 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
         self._refresh_handle = self.hass.loop.call_later(delay_seconds, _request_refresh)
 
     def get_account(self) -> AsyncAppleAccount | None:
+        """Return the next account to fetch with.
+
+        Accounts that are no longer logged in are skipped: they keep their entry
+        loaded until the re-auth flow reloads it, and fetching with them would
+        only fail again.
+        """
         accounts = self._storage.accounts
-        if not accounts:
-            return None
+        for _ in range(len(accounts)):
+            account = accounts[self._cur_acc_index % len(accounts)]
+            self._cur_acc_index += 1
 
-        account = accounts[self._cur_acc_index % len(accounts)]
-        self._cur_acc_index += 1
+            if account.login_state == LoginState.LOGGED_IN:
+                return account
 
-        return account
+            _LOGGER.debug(
+                "Skipping account %s (state: %s)",
+                account_name(account),
+                account.login_state,
+            )
+            self._start_reauth(account)
+
+        return None
 
     async def reload(self) -> None:
         """Updates coordinator intervals. Must be called after adding or removing a new account."""
@@ -199,10 +239,14 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
 
     @override
     async def _async_update_data(self) -> FindMyLocationData:
-        account = self.get_account()
-        if account is None:
+        if not self._storage.accounts:
             _LOGGER.debug("Skipping data update due to missing accounts")
             return {}
+
+        account = self.get_account()
+        if account is None:
+            msg = "All accounts require re-authentication"
+            raise UpdateFailed(msg)
         _LOGGER.debug("Using lookup account: %s", account)
 
         self._log(account, CoordinatorLogEvent.FETCH_START)
@@ -219,20 +263,26 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
 
             _LOGGER.exception("Unauthorized... :c")
 
-            raise ConfigEntryAuthFailed from err
+            self._start_reauth(account)
+
+            msg = "Account requires re-authentication"
+            raise UpdateFailed(msg) from err
         except InvalidStateError as err:
             success = False
 
             # Apple invalidates sessions periodically; the account then sits in
-            # REQUIRE_2FA and every fetch raises InvalidStateError. Without this
-            # the entry stays "loaded", entities silently go unavailable and the
-            # user is never prompted to log in again.
+            # REQUIRE_2FA and every fetch raises InvalidStateError. Prompt for
+            # re-auth on the owning entry. UpdateFailed (not ConfigEntryAuthFailed)
+            # keeps the shared coordinator scheduled for the remaining accounts.
             _LOGGER.warning(
                 "Account is no longer logged in (state: %s); re-authentication required",
                 getattr(account, "login_state", "unknown"),
             )
 
-            raise ConfigEntryAuthFailed from err
+            self._start_reauth(account)
+
+            msg = "Account requires re-authentication"
+            raise UpdateFailed(msg) from err
         finally:
             self._log(
                 account,
