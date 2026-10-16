@@ -145,9 +145,9 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
         last_fetch = self.get_account_last_fetch(account)
         if last_fetch is None:
             return None
-        return last_fetch + timedelta(
-            seconds=self._MIN_ACCOUNT_UPDATE_DELAY * len(self._storage.accounts)
-        )
+        # Accounts are fetched round-robin, one per update interval (see reload()),
+        # so the same account is fetched again after _MIN_ACCOUNT_UPDATE_DELAY.
+        return last_fetch + timedelta(seconds=self._MIN_ACCOUNT_UPDATE_DELAY)
 
     def get_account_last_fetch_result(
         self, account: AsyncAppleAccount
