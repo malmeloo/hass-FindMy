@@ -6,10 +6,11 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, cast
 
-from findmy import AsyncAppleAccount, FindMyAccessory, FixedRollingKeyPairAccessory, KeyPair
+from findmy import AsyncAppleAccount, FixedRollingKeyPairAccessory, KeyPair
 
 from .const import DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
+from .key_cache import CachedFindMyAccessory
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -109,7 +110,8 @@ class RuntimeStorage:
             return key
 
         if data["type"] == "device_rolling_derived":
-            accessory = FindMyAccessory.from_json(data["data"])
+            # Derived keys are kept between fetches and local refreshes, see key_cache.py.
+            accessory = CachedFindMyAccessory.from_json(data["data"])
 
             _LOGGER.debug(
                 "Storing entry %s as rolling (derived) tag: %s",
