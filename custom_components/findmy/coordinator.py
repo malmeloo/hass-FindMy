@@ -23,6 +23,7 @@ from findmy import (
 
 from ._entity import account_name
 from .const import signal_account_fetch
+from .key_cache import CachedFindMyAccessory
 
 if TYPE_CHECKING:
     from asyncio import TimerHandle
@@ -37,6 +38,9 @@ _LOGGER = logging.getLogger(__name__)
 
 FindMyDevice = KeyPair | FindMyAccessory | FixedRollingKeyPairAccessory
 type FindMyLocationData = dict[FindMyDevice, LocationReport | None]
+
+# FindMy.py searches the last week of keys of a rolling-key accessory for reports.
+_REPORT_KEY_WINDOW = timedelta(days=7)
 
 
 class CoordinatorFetchStatus(Enum):
@@ -191,6 +195,23 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
         """Returns a list of all devices that have been registered with the coordinator."""
         return list({ctx for ctx in self.async_contexts() if isinstance(ctx, FindMyDevice)})  # pyright: ignore[reportAny]
 
+    async def _async_warm_keys(self, devices: list[FindMyDevice]) -> None:
+        """Derive the keys the fetch is going to ask for outside the event loop.
+
+        FindMy.py builds its key batches synchronously between two requests. Without this,
+        hundreds of elliptic-curve key derivations per accessory block the event loop on
+        every fetch. Afterwards only indices that are new since the last fetch are derived.
+        """
+        now = datetime.now(tz=UTC)
+        for device in devices:
+            if not isinstance(device, CachedFindMyAccessory):
+                continue
+            _ = await self.hass.async_add_executor_job(
+                device.warm_keys,
+                now - _REPORT_KEY_WINDOW,
+                now + device.interval,
+            )
+
     def _log(self, account: AsyncAppleAccount, event: CoordinatorLogEvent) -> None:
         self._logs.append(
             CoordinatorLogEntry(timestamp=datetime.now(tz=UTC), account=account, event=event)
@@ -208,6 +229,7 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
         self._log(account, CoordinatorLogEvent.FETCH_START)
 
         devices: list[FindMyDevice] = self.devices
+        await self._async_warm_keys(devices)
         _LOGGER.debug("Fetching reports for devices: %s", devices)
         success = False
         try:
