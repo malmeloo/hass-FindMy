@@ -8,16 +8,17 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, final, override
 
-from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from findmy import (
     FindMyAccessory,
     FixedRollingKeyPairAccessory,
+    InvalidCredentialsError,
     InvalidStateError,
     KeyPair,
     LocationReport,
+    LoginState,
     UnauthorizedError,
 )
 
@@ -68,6 +69,8 @@ class CoordinatorLogEntry:
 class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
     # minimum time (in seconds) between location fetches on an account.
     _MIN_ACCOUNT_UPDATE_DELAY = 15 * 60
+    # Fetch log entries kept for the account sensors, which only read the latest few.
+    _MAX_LOG_ENTRIES = 100
 
     def __init__(self, hass: HomeAssistant, storage: RuntimeStorage) -> None:
         super().__init__(
@@ -195,7 +198,23 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
         self._logs.append(
             CoordinatorLogEntry(timestamp=datetime.now(tz=UTC), account=account, event=event)
         )
+        del self._logs[: -self._MAX_LOG_ENTRIES]
         async_dispatcher_send(self.hass, signal_account_fetch(account_name(account)))
+
+    def _start_reauth(self, account: AsyncAppleAccount) -> None:
+        """Ask to re-authenticate the config entry of an account.
+
+        All entries share this coordinator, which has no config entry of its own, so raising
+        ConfigEntryAuthFailed from an update would not start re-authentication of any entry.
+        """
+        entry_id = self._storage.get_entry_id(account)
+        entry = self.hass.config_entries.async_get_entry(entry_id) if entry_id else None
+        if entry is None:
+            _LOGGER.error("Could not find the config entry of account %s", account_name(account))
+            return
+
+        # Does nothing if a re-authentication of the entry is already in progress.
+        entry.async_start_reauth(self.hass)
 
     @override
     async def _async_update_data(self) -> FindMyLocationData:
@@ -207,32 +226,44 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
 
         self._log(account, CoordinatorLogEvent.FETCH_START)
 
+        if account.login_state != LoginState.LOGGED_IN:
+            # Fetching would only fail again until the entry is re-authenticated, which reloads
+            # it with a new account. This also catches accounts restored in another login state.
+            _LOGGER.debug(
+                "Skipping account %s (state: %s)", account_name(account), account.login_state
+            )
+            self._log(account, CoordinatorLogEvent.FETCH_ERROR)
+            self._start_reauth(account)
+
+            if any(acc.login_state == LoginState.LOGGED_IN for acc in self._storage.accounts):
+                # Skip this turn without failing the update, so entities stay available. Every
+                # account fetches all devices, and fetching with another one now would exceed its
+                # minimum delay between fetches.
+                return self.data or {}
+
+            msg = "All Apple accounts need to be re-authenticated"
+            raise UpdateFailed(msg)
+
         devices: list[FindMyDevice] = self.devices
         _LOGGER.debug("Fetching reports for devices: %s", devices)
         success = False
         try:
-            success = True
-
             device_reports = await account.fetch_location(devices)
-        except UnauthorizedError as err:
-            success = False
-
-            _LOGGER.exception("Unauthorized... :c")
-
-            raise ConfigEntryAuthFailed from err
-        except InvalidStateError as err:
-            success = False
-
-            # Apple invalidates sessions periodically; the account then sits in
-            # REQUIRE_2FA and every fetch raises InvalidStateError. Without this
-            # the entry stays "loaded", entities silently go unavailable and the
-            # user is never prompted to log in again.
+            success = True
+        except (UnauthorizedError, InvalidStateError, InvalidCredentialsError) as err:
+            # Apple invalidates sessions periodically. The account then either sits in
+            # REQUIRE_2FA (InvalidStateError), or signing in again with the stored password is
+            # refused (InvalidCredentialsError), and every later fetch fails the same way until
+            # the account entry is re-authenticated.
             _LOGGER.warning(
-                "Account is no longer logged in (state: %s); re-authentication required",
+                "Apple account needs to be re-authenticated (state: %s): %s",
                 getattr(account, "login_state", "unknown"),
+                err,
             )
+            self._start_reauth(account)
 
-            raise ConfigEntryAuthFailed from err
+            msg = "Apple account needs to be re-authenticated"
+            raise UpdateFailed(msg) from err
         finally:
             self._log(
                 account,

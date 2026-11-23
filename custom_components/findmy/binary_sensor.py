@@ -16,7 +16,13 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from findmy import FindMyAccessory
 
-from ._entity import battery_bits, build_device_info, device_unique_id, latest_status
+from ._entity import (
+    battery_bits,
+    build_device_info,
+    device_unique_id,
+    latest_status,
+    status_available,
+)
 from .const import signal_local_observation
 from .coordinator import FindMyCoordinator, FindMyDevice
 from .presence import FindMyPresenceBinarySensor
@@ -97,8 +103,10 @@ class FindMyBatteryLowBinarySensor(
     @callback
     def _handle_local_observation(self, *_args: object) -> None:
         value = self._compute()
-        if value != self._cached:
+        available = status_available(self.hass, self._coordinator, self._device)
+        if value != self._cached or available != self._attr_available:
             self._cached = value
+            self._attr_available = available
             self.async_write_ha_state()
 
     async def async_update(self) -> None:
@@ -116,7 +124,7 @@ class FindMyBatteryLowBinarySensor(
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        self._attr_available = self._coordinator.last_update_success
+        self._attr_available = status_available(self.hass, self._coordinator, self._device)
         self._cached = self._compute()
         self.async_write_ha_state()
 

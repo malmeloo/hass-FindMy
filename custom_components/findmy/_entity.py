@@ -82,6 +82,23 @@ def latest_report(
     return coordinator.data.get(device)
 
 
+def status_available(
+    hass: HomeAssistant,
+    coordinator: FindMyCoordinator,
+    device: FindMyDevice,
+) -> bool:
+    """Whether entities derived from the status byte have a source.
+
+    The status byte arrives with location reports and in local Offline Finding advertisements, so
+    these entities stay available while location fetches fail, once the accessory has been heard.
+    """
+    from .storage import RuntimeStorage  # noqa: PLC0415  # circular import
+
+    if coordinator.last_update_success:
+        return True
+    return device_unique_id(device) in RuntimeStorage.get(hass).local_status
+
+
 def latest_status(
     hass: HomeAssistant,
     coordinator: FindMyCoordinator,
