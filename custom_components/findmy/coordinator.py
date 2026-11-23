@@ -18,6 +18,7 @@ from findmy import (
     InvalidStateError,
     KeyPair,
     LocationReport,
+    LoginState,
     UnauthorizedError,
 )
 
@@ -224,6 +225,24 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
         _LOGGER.debug("Using lookup account: %s", account)
 
         self._log(account, CoordinatorLogEvent.FETCH_START)
+
+        if account.login_state != LoginState.LOGGED_IN:
+            # Fetching would only fail again until the entry is re-authenticated, which reloads
+            # it with a new account. This also catches accounts restored in another login state.
+            _LOGGER.debug(
+                "Skipping account %s (state: %s)", account_name(account), account.login_state
+            )
+            self._log(account, CoordinatorLogEvent.FETCH_ERROR)
+            self._start_reauth(account)
+
+            if any(acc.login_state == LoginState.LOGGED_IN for acc in self._storage.accounts):
+                # Skip this turn without failing the update, so entities stay available. Every
+                # account fetches all devices, and fetching with another one now would exceed its
+                # minimum delay between fetches.
+                return self.data or {}
+
+            msg = "All Apple accounts need to be re-authenticated"
+            raise UpdateFailed(msg)
 
         devices: list[FindMyDevice] = self.devices
         _LOGGER.debug("Fetching reports for devices: %s", devices)
