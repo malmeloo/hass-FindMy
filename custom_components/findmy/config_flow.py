@@ -355,7 +355,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             method_id: int = int(cast("int", info["method_id"]))
             self._2fa_method = self._2fa_methods[method_id]
-        except KeyError, ValueError:
+        except KeyError, IndexError, ValueError:
             _LOGGER.exception("Unable to look up method ID")
             return self.async_abort(reason="unknown_error")
 
@@ -376,7 +376,7 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not code:
             _LOGGER.error("No 2FA code submitted")
             return self.async_show_form(
-                step_id="2fa_submit",
+                step_id="acc_2fa_submit",
                 data_schema=DATA_SCHEME_ACC_2FA,
             )
 
@@ -466,6 +466,10 @@ class InitialSetupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 ),
                 description_placeholders={"account": suggested["email"]},
             )
+
+        # Signing in to another account would replace this entry's session with that account's
+        _ = await self.async_set_unique_id(info["email"].lower())
+        self._abort_if_unique_id_mismatch(reason="wrong_account")
 
         anisette_url = info.get("advanced_options", {}).get("anisette_url") or None
         _LOGGER.info(

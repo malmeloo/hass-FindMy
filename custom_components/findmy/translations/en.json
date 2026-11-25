@@ -92,7 +92,9 @@
     "abort": {
       "protocol_error": "A protocol exception occurred. Please report this error and try again later.",
       "unknown_error": "An unexpected error occurred. Please try again later.",
-      "reauth_successful": "Re-authentication was successful"
+      "reauth_successful": "Re-authentication was successful",
+      "already_configured": "This Apple account is already set up.",
+      "wrong_account": "Sign in with the same Apple account as before. To use another account, add it as a new entry instead."
     }
   },
   "selector": {
