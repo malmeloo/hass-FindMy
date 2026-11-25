@@ -32,9 +32,8 @@ async def _async_delete_devices(call: ServiceCall) -> None:
     Never touches account entries.  The `filter` field decides which device
     subset to remove:
       - "all" (default): every FindMy device entry
-      - "openhaystack": only device_openhaystack entries
       - "static":       only device_static entries
-      - "rolling":      only device_rolling entries
+      - "rolling":      device_rolling_derived and device_rolling_pre_generated entries
     """
     hass = call.hass
     filter_type = cast("str", call.data.get("filter", "all"))
@@ -47,7 +46,8 @@ async def _async_delete_devices(call: ServiceCall) -> None:
         if not isinstance(entry_type, str) or not entry_type.startswith("device_"):
             continue
 
-        if filter_type != "all" and entry_type != f"device_{filter_type}":
+        # Rolling-key devices are stored as device_rolling_derived or device_rolling_pre_generated
+        if filter_type != "all" and not entry_type.startswith(f"device_{filter_type}"):
             continue
 
         _LOGGER.info("delete_devices: removing entry %s (%s)", entry.title, entry.entry_id)
