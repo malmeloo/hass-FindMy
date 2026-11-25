@@ -4,11 +4,49 @@ Experimental custom integration to provide device tracker entities for FindMy Ne
 
 ## Setting up
 
-1. Add this repository to HACS and install the `FindMy` integration.
-2. Enable the integration. You must add at least two 'devices': one Apple Account and one tracker device.
-   1. When adding an account, you will need to specify an anisette server. You can use a public one, but it
-      might start throwing errors after a while, so private servers are preferred. Google is your friend.
-3. Enjoy!
+### Installing
+
+This integration is not yet in the HACS default store, so add it as a custom repository:
+
+1. In HACS, open the three-dot menu → **Custom repositories**.
+2. Paste `https://github.com/malmeloo/hass-FindMy`, choose the **Integration** category, and click **Add**.
+3. Find **FindMy** in the list, open it and click **Download**.
+4. **Restart Home Assistant.** This is required so the `findmy` Python dependency is installed; without
+   the restart the config flow fails to load with `No module named 'findmy'`.
+5. Go to **Settings → Devices & services → Add integration** and search for **FindMy**.
+
+> HACS may log an error about a failed zip download the first time. This is harmless — HACS falls back to
+> cloning the repository.
+
+### Adding accounts and devices
+
+Add entries one at a time. You need at least one Apple Account entry and one device entry.
+
+- **Apple Account:** sign in with your Apple ID. You can optionally set a remote anisette server under
+  *Advanced options*. Public servers work but can become unreliable, so a self-hosted one is preferred.
+- **Device:** choose the device type and provide its keys (see below).
+
+### Getting your device keys
+
+A tracker entry needs the device's keys. How you obtain them depends on the device:
+
+- **AirTags and other official Find My accessories:** export the keys on a Mac that is signed in to the
+  Apple ID the tags are registered to. Community tools that do this:
+  - [OpenTagViewer](https://github.com/parawanderer/OpenTagViewer) — exports per-tag `.plist` files (look in
+    the `OwnedBeacons` subfolders). Upload one as a **rolling-key device with derived keys**.
+  - [export-findmy](https://github.com/stek29/export-findmy) — reported working on recent macOS.
+  - [FindMy.py's own guide](https://docs.mikealmel.ooo/FindMy.py/getstarted/02-fetching.html), which
+    documents `python3 -m findmy decrypt` and the per-macOS-version steps.
+
+  Key extraction is most reliable on macOS 14; newer macOS protects the store key and may need extra steps.
+  The first network fetch for a freshly imported tag can take a while, because alignment data is not
+  exported — a nearby Bluetooth scan speeds it up.
+- **Custom OpenHaystack / macless-haystack tags:** add them as a **static-key device** with the private
+  key in base64. If you don't have one yet, `KeyPair.new()` in FindMy.py prints `private_key_b64`.
+
+### Done
+
+Your devices appear as `device_tracker` entities with companion battery and position sensors.
 
 ## Increasing the update frequency
 
