@@ -13,12 +13,13 @@ from homeassistant.components.device_tracker import (
 )
 from homeassistant.components.device_tracker.const import SourceType
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity import generate_entity_id
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from findmy import FindMyAccessory, FixedRollingKeyPairAccessory, KeyPair
@@ -161,7 +162,14 @@ class FindMyDeviceTracker(  # pyright: ignore [reportUninitializedInstanceVariab
         )
         self.async_on_remove(self._cancel_local_refresh_tasks)
 
-        self._schedule_local_candidate_refresh("initial")
+        @callback
+        def _initial_refresh(_hass: HomeAssistant) -> None:
+            self._schedule_local_candidate_refresh("initial")
+
+        # The first candidate build derives the whole key chain since pairing. It runs in
+        # the executor but holds the GIL, so wait until Home Assistant has started instead
+        # of competing with the setup of every other integration.
+        self.async_on_remove(async_at_started(self.hass, _initial_refresh))
 
     @override
     async def async_will_remove_from_hass(self) -> None:
