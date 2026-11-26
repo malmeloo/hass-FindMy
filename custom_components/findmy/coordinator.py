@@ -8,8 +8,10 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, final, override
 
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from findmy import (
@@ -83,11 +85,16 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
         self._cur_acc_index = 0
         self._logs: list[CoordinatorLogEntry] = []
         self._refresh_handle: TimerHandle | None = None
+        self._cancel_refresh_at_started: CALLBACK_TYPE | None = None
 
     def schedule_refresh(self, delay_seconds: float = 10.0) -> None:
-        """Schedule a refresh after a quiet period."""
+        """Schedule a refresh after a quiet period, once Home Assistant has started."""
         if self._refresh_handle is not None:
             self._refresh_handle.cancel()
+            self._refresh_handle = None
+        if self._cancel_refresh_at_started is not None:
+            self._cancel_refresh_at_started()
+            self._cancel_refresh_at_started = None
 
         def _request_refresh() -> None:
             self._refresh_handle = None
@@ -96,7 +103,16 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
                 name="findmy delayed startup refresh",
             )
 
-        self._refresh_handle = self.hass.loop.call_later(delay_seconds, _request_refresh)
+        @callback
+        def _arm(_hass: HomeAssistant) -> None:
+            self._cancel_refresh_at_started = None
+            self._refresh_handle = self.hass.loop.call_later(delay_seconds, _request_refresh)
+
+        # During startup the first fetch (anisette, key derivation, report decryption) would
+        # compete with the setup of every other integration. Runs right away once started.
+        cancel = async_at_started(self.hass, _arm)
+        if self._refresh_handle is None:
+            self._cancel_refresh_at_started = cancel
 
     def get_account(self) -> AsyncAppleAccount | None:
         accounts = self._storage.accounts
