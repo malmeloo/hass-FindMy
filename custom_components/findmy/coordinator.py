@@ -8,8 +8,10 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, final, override
 
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from findmy import (
@@ -23,6 +25,7 @@ from findmy import (
 
 from ._entity import account_name
 from .const import signal_account_fetch
+from .key_cache import CachedFindMyAccessory
 
 if TYPE_CHECKING:
     from asyncio import TimerHandle
@@ -37,6 +40,9 @@ _LOGGER = logging.getLogger(__name__)
 
 FindMyDevice = KeyPair | FindMyAccessory | FixedRollingKeyPairAccessory
 type FindMyLocationData = dict[FindMyDevice, LocationReport | None]
+
+# FindMy.py searches the last week of keys of a rolling-key accessory for reports.
+_REPORT_KEY_WINDOW = timedelta(days=7)
 
 
 class CoordinatorFetchStatus(Enum):
@@ -83,11 +89,16 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
         self._cur_acc_index = 0
         self._logs: list[CoordinatorLogEntry] = []
         self._refresh_handle: TimerHandle | None = None
+        self._cancel_refresh_at_started: CALLBACK_TYPE | None = None
 
     def schedule_refresh(self, delay_seconds: float = 10.0) -> None:
-        """Schedule a refresh after a quiet period."""
+        """Schedule a refresh after a quiet period, once Home Assistant has started."""
         if self._refresh_handle is not None:
             self._refresh_handle.cancel()
+            self._refresh_handle = None
+        if self._cancel_refresh_at_started is not None:
+            self._cancel_refresh_at_started()
+            self._cancel_refresh_at_started = None
 
         def _request_refresh() -> None:
             self._refresh_handle = None
@@ -96,7 +107,16 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
                 name="findmy delayed startup refresh",
             )
 
-        self._refresh_handle = self.hass.loop.call_later(delay_seconds, _request_refresh)
+        @callback
+        def _arm(_hass: HomeAssistant) -> None:
+            self._cancel_refresh_at_started = None
+            self._refresh_handle = self.hass.loop.call_later(delay_seconds, _request_refresh)
+
+        # During startup the first fetch (anisette, key derivation, report decryption) would
+        # compete with the setup of every other integration. Runs right away once started.
+        cancel = async_at_started(self.hass, _arm)
+        if self._refresh_handle is None:
+            self._cancel_refresh_at_started = cancel
 
     def get_account(self) -> AsyncAppleAccount | None:
         accounts = self._storage.accounts
@@ -191,6 +211,23 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
         """Returns a list of all devices that have been registered with the coordinator."""
         return list({ctx for ctx in self.async_contexts() if isinstance(ctx, FindMyDevice)})  # pyright: ignore[reportAny]
 
+    async def _async_warm_keys(self, devices: list[FindMyDevice]) -> None:
+        """Derive the keys the fetch is going to ask for outside the event loop.
+
+        FindMy.py builds its key batches synchronously between two requests. Without this,
+        hundreds of elliptic-curve key derivations per accessory block the event loop on
+        every fetch. Afterwards only indices that are new since the last fetch are derived.
+        """
+        now = datetime.now(tz=UTC)
+        for device in devices:
+            if not isinstance(device, CachedFindMyAccessory):
+                continue
+            _ = await self.hass.async_add_executor_job(
+                device.warm_keys,
+                now - _REPORT_KEY_WINDOW,
+                now + device.interval,
+            )
+
     def _log(self, account: AsyncAppleAccount, event: CoordinatorLogEvent) -> None:
         self._logs.append(
             CoordinatorLogEntry(timestamp=datetime.now(tz=UTC), account=account, event=event)
@@ -208,6 +245,7 @@ class FindMyCoordinator(DataUpdateCoordinator[FindMyLocationData | None]):
         self._log(account, CoordinatorLogEvent.FETCH_START)
 
         devices: list[FindMyDevice] = self.devices
+        await self._async_warm_keys(devices)
         _LOGGER.debug("Fetching reports for devices: %s", devices)
         success = False
         try:

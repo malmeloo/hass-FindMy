@@ -108,9 +108,14 @@
     "step": {
       "init": {
         "title": "Local presence",
-        "description": "The accessory is reported away when Home Assistant Bluetooth has not heard it for this long.",
+        "description": "Settings for local Bluetooth recognition of the device: how long until it is considered away, and how long unseen before Home Assistant stops handling it.",
         "data": {
-          "away_timeout": "Away timeout"
+          "away_timeout": "Away timeout",
+          "key_search_window_days": "Stop recognising a device not seen for more than (days)"
+        },
+        "data_description": {
+          "away_timeout": "The accessory is reported away when Home Assistant Bluetooth has not heard it for this long.",
+          "key_search_window_days": "A longer period = slower Home Assistant start. Default 30 days."
         }
       }
     }

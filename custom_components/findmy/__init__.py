@@ -7,8 +7,14 @@ from homeassistant.const import Platform
 
 from findmy import AsyncAppleAccount
 
-from .const import CONFIG_FLOW_VERSION_MAJOR, CONFIG_FLOW_VERSION_MINOR
+from .const import (
+    CONF_KEY_SEARCH_WINDOW_DAYS,
+    CONFIG_FLOW_VERSION_MAJOR,
+    CONFIG_FLOW_VERSION_MINOR,
+    DEFAULT_KEY_SEARCH_WINDOW_DAYS,
+)
 from .coordinator import FindMyDevice
+from .key_cache import CachedFindMyAccessory
 from .services import async_register as _async_register_services
 from .storage import RuntimeStorage
 
@@ -74,12 +80,25 @@ async def async_setup(hass: HomeAssistant, _config: ConfigEntry) -> bool:
     return True
 
 
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry[EntryData]) -> None:
+    """Apply a changed key search window; the next candidate refresh uses it."""
+    try:
+        item = RuntimeStorage.get(hass).get_entry(entry)
+    except KeyError:
+        return
+    if isinstance(item, CachedFindMyAccessory):
+        item.search_window_days = int(
+            entry.options.get(CONF_KEY_SEARCH_WINDOW_DAYS, DEFAULT_KEY_SEARCH_WINDOW_DAYS),
+        )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry[EntryData]) -> bool:
     _LOGGER.debug("Setting up FindMy entry: %s", entry.entry_id)
 
     storage = RuntimeStorage.get(hass)
 
     item = await storage.add_entry(entry)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     if isinstance(item, AsyncAppleAccount):
         await hass.config_entries.async_forward_entry_setups(entry, ACCOUNT_PLATFORMS)

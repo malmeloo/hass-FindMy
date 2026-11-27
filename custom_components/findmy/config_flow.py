@@ -46,9 +46,13 @@ from findmy import (
 
 from .const import (
     CONF_AWAY_TIMEOUT,
+    CONF_KEY_SEARCH_WINDOW_DAYS,
     CONFIG_FLOW_VERSION_MAJOR,
     CONFIG_FLOW_VERSION_MINOR,
     DEFAULT_AWAY_TIMEOUT_MINUTES,
+    DEFAULT_KEY_SEARCH_WINDOW_DAYS,
+    MAX_KEY_SEARCH_WINDOW_DAYS,
+    MIN_KEY_SEARCH_WINDOW_DAYS,
     DOMAIN,
 )
 
@@ -701,6 +705,18 @@ DATA_SCHEMA_ROLLING_OPTIONS = vol.Schema(
                 mode=NumberSelectorMode.BOX,
             ),
         ),
+        vol.Required(
+            CONF_KEY_SEARCH_WINDOW_DAYS,
+            default=DEFAULT_KEY_SEARCH_WINDOW_DAYS,
+        ): NumberSelector(
+            NumberSelectorConfig(
+                min=MIN_KEY_SEARCH_WINDOW_DAYS,
+                max=MAX_KEY_SEARCH_WINDOW_DAYS,
+                step=1,
+                unit_of_measurement="days",
+                mode=NumberSelectorMode.BOX,
+            ),
+        ),
     },
 )
 
@@ -715,7 +731,12 @@ class RollingDeviceOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         if user_input is not None:
             return self.async_create_entry(
-                data={CONF_AWAY_TIMEOUT: int(cast("float", user_input[CONF_AWAY_TIMEOUT]))},
+                data={
+                    CONF_AWAY_TIMEOUT: int(cast("float", user_input[CONF_AWAY_TIMEOUT])),
+                    CONF_KEY_SEARCH_WINDOW_DAYS: int(
+                        cast("float", user_input[CONF_KEY_SEARCH_WINDOW_DAYS]),
+                    ),
+                },
             )
 
         return self.async_show_form(

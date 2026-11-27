@@ -1,0 +1,18 @@
+{
+  "options": {
+    "step": {
+      "init": {
+        "title": "Obecność lokalna",
+        "description": "Ustawienia lokalnego rozpoznawania urządzenia przez Bluetooth: po jakim czasie uznać je za nieobecne i po jakim czasie niewidzenia przestać je obsługiwać.",
+        "data": {
+          "away_timeout": "Czas do uznania za nieobecne",
+          "key_search_window_days": "Przestań obsługiwać urządzenie niewidziane dłużej niż (dni)"
+        },
+        "data_description": {
+          "away_timeout": "Urządzenie jest uznawane za nieobecne, gdy Bluetooth Home Assistanta nie słyszał go tak długo.",
+          "key_search_window_days": "Dłuższy czas = wolniejszy start HA. Domyślnie 30 dni."
+        }
+      }
+    }
+  }
+}
