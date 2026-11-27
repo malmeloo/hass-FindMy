@@ -19,23 +19,30 @@ from typing import TYPE_CHECKING, final, override
 
 from findmy import FindMyAccessory, KeyPair
 
+from .const import (
+    DEFAULT_KEY_SEARCH_WINDOW_DAYS,
+    MAX_KEY_SEARCH_WINDOW_DAYS,
+    MIN_KEY_SEARCH_WINDOW_DAYS,
+)
+
 if TYPE_CHECKING:
     from findmy import KeyPairType
 
 _LOGGER = logging.getLogger(__name__)
 
-# Number of key indices kept per accessory (15 minutes each, so about 85 days). An accessory
-# that was not located for longer than this has a larger search window; the indices beyond the
-# limit are derived on demand.
-MAX_CACHED_INDICES = 8192
+# Key indices roll over every 15 minutes, i.e. 96 per day.
+_INDICES_PER_DAY = 96
 
-# Number of newest key indices that are searched for an accessory. FindMy.py searches every
-# index since the last alignment, which never ends for an accessory that is not located any more
-# (empty battery, lost): after years that is ~100,000 indices, i.e. hundreds of requests to
-# Apple per fetch and more than a minute of key derivation per local refresh. Such an accessory
-# is only searched within this many indices (about 83 days) below the highest possible index;
-# the margin to MAX_CACHED_INDICES keeps the whole searched range in the cache.
-MAX_SEARCH_INDICES = MAX_CACHED_INDICES - 192
+# Margin between the searched range and the cache size: keeps the whole searched range plus the
+# look-ahead of a fetch in the cache.
+_CACHE_MARGIN_INDICES = 192
+
+# FindMy.py searches every index since the last alignment, which never ends for an accessory
+# that is not located any more (empty battery, lost): after years that is ~100,000 indices, i.e.
+# hundreds of requests to Apple per fetch and minutes of key derivation per local refresh. Such
+# an accessory is only searched within ``search_window_days`` below the highest possible index.
+# An accessory that was not located for longer than the window has the indices beyond it
+# derived on demand.
 
 # Deriving keys is CPU-bound Python and OpenSSL work that holds the GIL. Only one thread derives
 # at a time, so a restart with many accessories cannot starve the event loop from several
@@ -98,15 +105,36 @@ class CachedFindMyAccessory(FindMyAccessory):
 
         # Key pairs per key index. Only indices in [_cache_floor, _cache_top] are kept.
         self._key_cache: dict[int, tuple[KeyPair, ...]] = {}
+        self._search_window_days: int = DEFAULT_KEY_SEARCH_WINDOW_DAYS
         self._cache_top: int = -1
         self._cache_floor: int = 0
         # Secondary keys are valid for many indices; share one object between them.
         self._interned: dict[bytes, CachedKeyPair] = {}
 
+    @property
+    def search_window_days(self) -> int:
+        """Days of key indices that are searched, counted back from the newest possible index."""
+        return self._search_window_days
+
+    @search_window_days.setter
+    def search_window_days(self, days: int) -> None:
+        self._search_window_days = min(
+            max(int(days), MIN_KEY_SEARCH_WINDOW_DAYS),
+            MAX_KEY_SEARCH_WINDOW_DAYS,
+        )
+
+    @property
+    def _max_search_indices(self) -> int:
+        return self._search_window_days * _INDICES_PER_DAY
+
+    @property
+    def _max_cached_indices(self) -> int:
+        return self._max_search_indices + _CACHE_MARGIN_INDICES
+
     @override
     def get_min_index(self, dt: datetime) -> int:
         newest = self.get_max_index(datetime.now(tz=UTC))
-        return max(super().get_min_index(dt), newest - MAX_SEARCH_INDICES + 1)
+        return max(super().get_min_index(dt), newest - self._max_search_indices + 1)
 
     @override
     def keys_at(self, ind: int) -> set[KeyPair]:
@@ -128,7 +156,7 @@ class CachedFindMyAccessory(FindMyAccessory):
         Meant to be run in a worker thread before the same range is read on the event loop.
         """
         max_index = self.get_max_index(end)
-        min_index = max(self.get_min_index(start), max_index - MAX_CACHED_INDICES + 1, 0)
+        min_index = max(self.get_min_index(start), max_index - self._max_cached_indices + 1, 0)
 
         derived = 0
         # Newest first: this is the order in which a location fetch asks for the keys.
@@ -157,7 +185,7 @@ class CachedFindMyAccessory(FindMyAccessory):
     def _store(self, ind: int, keys: tuple[KeyPair, ...]) -> None:
         """Remember the keys of an index and drop indices that fell out of the kept range."""
         if ind > self._cache_top:
-            new_floor = max(ind - MAX_CACHED_INDICES + 1, 0)
+            new_floor = max(ind - self._max_cached_indices + 1, 0)
             for old in [i for i in self._key_cache if i < new_floor]:
                 self._evict(old, new_floor)
             self._cache_top = ind

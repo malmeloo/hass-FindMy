@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, cast
 
 from findmy import AsyncAppleAccount, FixedRollingKeyPairAccessory, KeyPair
 
-from .const import DOMAIN
+from .const import CONF_KEY_SEARCH_WINDOW_DAYS, DEFAULT_KEY_SEARCH_WINDOW_DAYS, DOMAIN
 from .coordinator import FindMyCoordinator, FindMyDevice
 from .key_cache import CachedFindMyAccessory
 
@@ -112,6 +112,9 @@ class RuntimeStorage:
         if data["type"] == "device_rolling_derived":
             # Derived keys are kept between fetches and local refreshes, see key_cache.py.
             accessory = CachedFindMyAccessory.from_json(data["data"])
+            accessory.search_window_days = int(
+                entry.options.get(CONF_KEY_SEARCH_WINDOW_DAYS, DEFAULT_KEY_SEARCH_WINDOW_DAYS),
+            )
 
             _LOGGER.debug(
                 "Storing entry %s as rolling (derived) tag: %s",
